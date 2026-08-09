@@ -10,8 +10,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Створюємо папку для завантажених файлів, якщо її нема
-const uploadDir = path.join(__dirname, 'public', 'uploads');
+// Створюємо папку для завантажених файлів у корені, якщо її нема
+const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -23,7 +23,8 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-app.use(express.static('public'));
+// Роздаємо статичні файли з поточного кореню проєкту (де лежить index.html) та папку uploads
+app.use(express.static(__dirname));
 app.use(express.json());
 
 // База даних SQLite
@@ -147,9 +148,8 @@ io.on('connection', (socket) => {
     });
 });
 
-// Рендер автоматично передає порт через змінну середовища process.env.PORT, тому використовуємо її або 3000 для локального запуску
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Сервер месенджера запущено на порту ${PORT}`);
 });
-        
+            
