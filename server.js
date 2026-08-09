@@ -13,7 +13,6 @@ const io = new Server(server);
 // Створюємо папку для завантажених файлів, якщо її нема
 const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)) {
-    fs.createWriteStream(uploadDir); // базово або через mkdirSync
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
@@ -134,7 +133,6 @@ io.on('connection', (socket) => {
         db.get(`SELECT reactions FROM messages WHERE id = ?`, [data.id], (err, row) => {
             if (row) {
                 let reactions = JSON.parse(row.reactions || '{}');
-                // Додаємо або оновлюємо реакцію від цього сокета
                 reactions[socket.id] = data.emoji;
                 
                 db.run(`UPDATE messages SET reactions = ? WHERE id = ?`, [JSON.stringify(reactions), data.id], () => {
@@ -149,6 +147,9 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3000, () => {
-    console.log('Сервер месенджера запущено на http://localhost:3000');
+// Рендер автоматично передає порт через змінну середовища process.env.PORT, тому використовуємо її або 3000 для локального запуску
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Сервер месенджера запущено на порту ${PORT}`);
 });
+        
