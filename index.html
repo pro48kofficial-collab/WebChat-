@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebChat</title> 
-    !-- 🟢 ОСЬ СЮДИ ДОДАВ СКРИПТ TELEGRAM -->
+    <title>WebChat</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
@@ -146,6 +145,12 @@
                         <div class="chat-header-status" id="active-status">онлайн</div>
                     </div>
                 </div>
+
+    <div class="chat-header-actions" id="chat-actions-bar">
+        <button class="star-donate-btn" onclick="donateWithStars()">⭐ Задонатити</button>
+    </div>
+            </div>
+            
                 <div class="chat-header-actions" id="chat-actions-bar">
                     <!-- Додаткові кнопки (наприклад, заблокувати) -->
                 </div>
