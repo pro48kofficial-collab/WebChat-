@@ -89,7 +89,6 @@
         .message img { max-width: 100%; border-radius: 8px; margin-top: 5px; display: block; }
         .msg-meta { display: flex; justify-content: flex-end; gap: 4px; font-size: 10px; color: #cbd5e1; margin-top: 3px; }
 
-        /* Реакції */
         .reactions-bar { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
         .reaction-badge { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 10px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 3px; border: 1px solid rgba(255,255,255,0.1); }
         .add-reaction-btn { background: none; border: none; color: #94a3b8; font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 8px; }
@@ -124,13 +123,13 @@
                 <div class="avatar-picker">
                     <img id="preview-avatar" src="https://i.imgur.com/6VBx3io.png" alt="Avatar">
                     <input type="file" id="auth-file-input" style="display: none;" accept="image/*" onchange="handleImageUpload(this, 'preview-avatar', 'input-avatar')">
-                    <button class="file-btn-small" onclick="document.getElementById('auth-file-input').click()">З галереї</button>
+                    <button class="file-btn-small" type="button" onclick="document.getElementById('auth-file-input').click()">З галереї</button>
                     <input type="hidden" id="input-avatar" value="https://i.imgur.com/6VBx3io.png">
                 </div>
                 <input type="text" id="input-username" placeholder="Юзернейм (@tag)">
                 <input type="text" id="input-displayname" placeholder="Твоє ім'я">
                 <textarea id="input-bio" placeholder="Про себе..."></textarea>
-                <button onclick="saveProfileAndEnter()">Увійти</button>
+                <button type="button" onclick="saveProfileAndEnter()">Увійти</button>
             </div>
         </div>
 
@@ -140,7 +139,7 @@
             <div class="view-panel" id="sidebar-view">
                 <div class="sidebar-header">
                     <input type="text" class="search-input" id="search-box" placeholder="Пошук (@tag)..." oninput="handleSearch()">
-                    <button class="create-channel-btn" onclick="openChannelModal()">+ Канал</button>
+                    <button class="create-channel-btn" type="button" onclick="openChannelModal()">+ Канал</button>
                 </div>
                 <div class="chats-list" id="chats-list"></div>
                 <div class="my-profile-bar" onclick="openProfileModal()">
@@ -154,7 +153,7 @@
 
             <div class="view-panel" id="chat-view">
                 <div class="chat-header">
-                    <button class="back-btn" onclick="closeChat()">‹</button>
+                    <button class="back-btn" type="button" onclick="closeChat()">‹</button>
                     <div class="chat-header-info">
                         <img id="active-avatar" src="" alt="">
                         <div class="chat-header-text">
@@ -167,11 +166,11 @@
 
                 <div class="messages-container" id="messages-container"></div>
 
-                <div class="chat-input-panel">
+                <div class="chat-input-panel" id="chat-input-panel">
                     <label class="file-upload-label" for="file-input">📎</label>
                     <input type="file" id="file-input" style="display: none;" accept="image/*" onchange="sendFile(this)">
                     <textarea id="message-input" placeholder="Повідомлення..." maxlength="5000" onkeydown="handleKey(event)"></textarea>
-                    <button class="send-btn" onclick="sendMessage()">➤</button>
+                    <button class="send-btn" type="button" onclick="sendMessage()">➤</button>
                 </div>
             </div>
 
@@ -195,14 +194,14 @@
             <div class="avatar-picker">
                 <img id="edit-preview-avatar" src="" alt="Avatar">
                 <input type="file" id="profile-file-input" style="display: none;" accept="image/*" onchange="handleImageUpload(this, 'edit-preview-avatar', 'edit-avatar')">
-                <button class="file-btn-small" onclick="document.getElementById('profile-file-input').click()">З галереї</button>
+                <button class="file-btn-small" type="button" onclick="document.getElementById('profile-file-input').click()">З галереї</button>
                 <input type="hidden" id="edit-avatar">
             </div>
             <input type="text" id="edit-displayname" placeholder="Ім'я">
             <textarea id="edit-bio" placeholder="Опис"></textarea>
             <div class="modal-buttons">
-                <button class="btn-cancel" onclick="closeModals()">Скасувати</button>
-                <button class="btn-save" onclick="updateMyProfile()">Зберегти</button>
+                <button class="btn-cancel" type="button" onclick="closeModals()">Скасувати</button>
+                <button class="btn-save" type="button" onclick="updateMyProfile()">Зберегти</button>
             </div>
         </div>
     </div>
@@ -216,12 +215,12 @@
             <div class="avatar-picker">
                 <img id="channel-preview-avatar" src="https://i.imgur.com/6VBx3io.png" alt="Avatar">
                 <input type="file" id="channel-file-input" style="display: none;" accept="image/*" onchange="handleImageUpload(this, 'channel-preview-avatar', 'channel-avatar')">
-                <button class="file-btn-small" onclick="document.getElementById('channel-file-input').click()">З галереї</button>
+                <button class="file-btn-small" type="button" onclick="document.getElementById('channel-file-input').click()">З галереї</button>
                 <input type="hidden" id="channel-avatar" value="https://i.imgur.com/6VBx3io.png">
             </div>
             <div class="modal-buttons">
-                <button class="btn-cancel" onclick="closeModals()">Скасувати</button>
-                <button class="btn-save" id="channel-save-btn" onclick="saveChannel()">Створити</button>
+                <button class="btn-cancel" type="button" onclick="closeModals()">Скасувати</button>
+                <button class="btn-save" id="channel-save-btn" type="button" onclick="saveChannel()">Створити</button>
             </div>
         </div>
     </div>
@@ -318,10 +317,10 @@
             const el = document.createElement('div');
             el.className = 'chat-item';
             el.onclick = () => {
-                if (item.type === 'user') {
+                if (item.type === 'user' || !item.type) {
                     let found = myChats.find(c => c.id === item.id);
                     if (!found) {
-                        found = { type: 'user', id: item.id, displayName: item.displayName, username: item.username, avatar: item.avatar, online: item.online };
+                        found = { type: 'user', id: item.id, displayName: item.displayName || item.name, username: item.username, avatar: item.avatar, online: item.online };
                         myChats.push(found);
                         localStorage.setItem('webchat_my_chats', JSON.stringify(myChats));
                     }
@@ -331,8 +330,71 @@
                     if (!foundChan) {
                         channels.push(item);
                         localStorage.setItem('webchat_channels', JSON.stringify(channels));
-            closeModals();
+                    }
+                    openChat(item);
+                }
+            };
+
+            const isOnline = item.online ? 'online' : '';
+            el.innerHTML = `
+                <div class="user-avatar-wrap">
+                    <img src="${item.avatar || 'https://i.imgur.com/6VBx3io.png'}" alt="">
+                    ${item.type !== 'channel' ? `<div class="status-dot ${isOnline}"></div>` : ''}
+                </div>
+                <div class="chat-info">
+                    <div class="chat-name">${sanitizeHTML(item.displayName || item.name || '')}</div>
+                    <div class="chat-last-msg">${sanitizeHTML(item.username || '')}</div>
+                </div>
+            `;
+            container.appendChild(el);
+        }
+
+        function handleSearch() {
+            const query = document.getElementById('search-box').value.trim().toLowerCase();
+            if (!query) {
+                searchResults = [];
+                renderChatsList();
+                return;
+            }
+            socket.emit('search users', query);
+        }
+
+        socket.on('search results', (results) => {
+            searchResults = results.filter(u => u.id !== currentUser.id);
             renderChatsList();
+        });
+
+        function openChat(chat) {
+            activeChat = chat;
+            document.querySelector('.app-container').classList.add('chat-active');
+            document.getElementById('active-title').innerText = chat.displayName || chat.name;
+            document.getElementById('active-avatar').src = chat.avatar || 'https://i.imgur.com/6VBx3io.png';
+            document.getElementById('active-status').innerText = chat.username || '';
+            document.getElementById('messages-container').innerHTML = '';
+            
+            const actionsBar = document.getElementById('chat-actions-bar');
+            actionsBar.innerHTML = '';
+
+            const inputPanel = document.getElementById('chat-input-panel');
+
+            if (chat.type === 'channel') {
+                const isAdmin = chat.adminId === currentUser.id;
+                if (isAdmin) {
+                    actionsBar.innerHTML = `<button class="action-btn" type="button" onclick="openEditChannelModal()">✏️</button>`;
+                    inputPanel.style.display = 'flex';
+                } else {
+                    inputPanel.style.display = 'none';
+                }
+            } else {
+                inputPanel.style.display = 'flex';
+            }
+
+            socket.emit('join chat', chat.id);
+        }
+
+        function closeChat() {
+            document.querySelector('.app-container').classList.remove('chat-active');
+            activeChat = null;
         }
 
         function openProfileModal() { 
@@ -343,7 +405,33 @@
             document.getElementById('profile-modal').style.display = 'flex'; 
         }
 
-        function closeModals() { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); }
+        function openChannelModal() {
+            editingChannelId = null;
+            document.getElementById('channel-modal-title').innerText = 'Створити канал';
+            document.getElementById('channel-save-btn').innerText = 'Створити';
+            document.getElementById('channel-tag').value = '';
+            document.getElementById('channel-name').value = '';
+            document.getElementById('channel-preview-avatar').src = 'https://i.imgur.com/6VBx3io.png';
+            document.getElementById('channel-avatar').value = 'https://i.imgur.com/6VBx3io.png';
+            document.getElementById('channel-modal').style.display = 'flex';
+        }
+
+        function openEditChannelModal() {
+            if (!activeChat || activeChat.type !== 'channel') return;
+            editingChannelId = activeChat.id;
+            document.getElementById('channel-modal-title').innerText = 'Редагувати канал';
+            document.getElementById('channel-save-btn').innerText = 'Зберегти';
+            document.getElementById('channel-tag').value = activeChat.username;
+            document.getElementById('channel-name').value = activeChat.name;
+            document.getElementById('channel-preview-avatar').src = activeChat.avatar;
+            document.getElementById('channel-avatar').value = activeChat.avatar;
+            document.getElementById('channel-modal').style.display = 'flex';
+        }
+
+        function closeModals() { 
+            document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); 
+            document.getElementById('reaction-picker').style.display = 'none';
+        }
 
         function updateMyProfile() {
             currentUser.avatar = document.getElementById('edit-avatar').value;
@@ -352,6 +440,143 @@
             localStorage.setItem('webchat_user', JSON.stringify(currentUser));
             closeModals();
             initApp();
+            socket.emit('set profile', currentUser);
+        }
+
+        function saveChannel() {
+            const name = document.getElementById('channel-name').value.trim();
+            const tag = document.getElementById('channel-tag').value.trim();
+            const avatar = document.getElementById('channel-avatar').value;
+
+            if (!name || !tag) return alert('Заповніть назву та посилання каналу!');
+
+            const formattedTag = tag.startsWith('@') ? tag : '@' + tag;
+
+            if (editingChannelId) {
+                let chan = channels.find(c => c.id === editingChannelId);
+                if (chan) {
+                    chan.name = name;
+                    chan.username = formattedTag;
+                    chan.avatar = avatar;
+                    localStorage.setItem('webchat_channels', JSON.stringify(channels));
+                    
+                    if (activeChat && activeChat.id === editingChannelId) {
+                        activeChat.name = name;
+                        activeChat.username = formattedTag;
+                        activeChat.avatar = avatar;
+                        document.getElementById('active-title').innerText = name;
+                        document.getElementById('active-avatar').src = avatar;
+                        document.getElementById('active-status').innerText = formattedTag;
+                    }
+                }
+            } else {
+                const newChannel = {
+                    type: 'channel',
+                    id: 'chan_' + Math.random().toString(36).substr(2, 9),
+                    name,
+                    username: formattedTag,
+                    avatar,
+                    adminId: currentUser.id
+                };
+
+                channels.push(newChannel);
+                localStorage.setItem('webchat_channels', JSON.stringify(channels));
+            }
+
+            closeModals();
+            renderChatsList();
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            if (!text || !activeChat) return;
+
+            if (activeChat.type === 'channel' && activeChat.adminId !== currentUser.id) {
+                return alert('Тільки адміністратор може писати в цей канал!');
+            }
+
+            const msgData = {
+                chatId: activeChat.id,
+                sender: currentUser,
+                text: sanitizeHTML(text),
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            socket.emit('chat message', msgData);
+            input.value = '';
+        }
+
+        function sendFile(input) {
+            const file = input.files[0];
+            if (!file || !activeChat) return;
+
+            if (activeChat.type === 'channel' && activeChat.adminId !== currentUser.id) {
+                return alert('Тільки адміністратор може надсилати файли в цей канал!');
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const msgData = {
+                    chatId: activeChat.id,
+                    sender: currentUser,
+                    image: e.target.result,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                };
+                socket.emit('chat message', msgData);
+            }
+            reader.readAsDataURL(file);
+        }
+
+        socket.on('chat message', (msg) => {
+            if (activeChat && msg.chatId === activeChat.id) {
+                appendMessage(msg);
+            }
+        });
+
+        function appendMessage(msg) {
+            const container = document.getElementById('messages-container');
+            const el = document.createElement('div');
+            const isOutgoing = msg.sender.id === currentUser.id;
+            el.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
+            el.dataset.id = msg.id || Math.random();
+
+            let content = '';
+            if (msg.text) content += `<div>${msg.text}</div>`;
+            if (msg.image) content += `<img src="${msg.image}" alt="img">`;
+            
+            content += `
+                <div class="msg-meta">
+                    <span>${msg.timestamp}</span>
+                </div>
+                <div class="reactions-bar" id="reactions-${el.dataset.id}">
+                    <button class="add-reaction-btn" type="button" onclick="openReactionPicker(event, '${el.dataset.id}')">+</button>
+                </div>
+            `;
+            el.innerHTML = content;
+            container.appendChild(el);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function openReactionPicker(e, msgId) {
+            e.stopPropagation();
+            selectedMsgForReaction = msgId;
+            const picker = document.getElementById('reaction-picker');
+            picker.style.display = 'flex';
+            picker.style.top = (e.clientY - 50) + 'px';
+            picker.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
+        }
+
+        function addReaction(emoji) {
+            if (!selectedMsgForReaction) return;
+            const bar = document.getElementById(`reactions-${selectedMsgForReaction}`);
+            if (bar) {
+                const badge = document.createElement('span');
+                badge.className = 'reaction-badge';
+                badge.innerHTML = `${emoji} 1`;
+                bar.insertBefore(badge, bar.lastElementChild);
+            }
+            closeModals();
         }
 
         function handleKey(e) {
