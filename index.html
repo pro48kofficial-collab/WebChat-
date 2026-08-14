@@ -268,13 +268,13 @@
             if (!username || !displayName) return alert('Введіть юзернейм та ім\'я!');
 
             currentUser = {
-                id: socket.id || 'user_' + Math.random().toString(36).substr(2, 9),
-                username: username.startsWith('@') ? username : '@' + username,
-                displayName,
-                avatar: avatar || 'https://i.imgur.com/6VBx3io.png',
-                bio
-            };
-
+    id: username.toLowerCase().startsWith('@') ? username.toLowerCase() : '@' + username.toLowerCase(),
+    username: username.startsWith('@') ? username : '@' + username,
+    displayName,
+    avatar: avatar || 'https://i.imgur.com/6VBx3io.png',
+    bio
+};
+         
             localStorage.setItem('webchat_user', JSON.stringify(currentUser));
             document.getElementById('auth-screen').style.display = 'none';
             document.getElementById('main-app').style.display = 'flex';
@@ -318,13 +318,25 @@
             el.className = 'chat-item';
             el.onclick = () => {
                 if (item.type === 'user' || !item.type) {
-                    let found = myChats.find(c => c.id === item.id);
-                    if (!found) {
-                        found = { type: 'user', id: item.id, displayName: item.displayName || item.name, username: item.username, avatar: item.avatar, online: item.online };
-                        myChats.push(found);
-                        localStorage.setItem('webchat_my_chats', JSON.stringify(myChats));
-                    }
-                    openChat(found);
+    // Формуємо унікальний, але стабільний ID кімнати для вас двох
+    const ids = [currentUser.id, item.id].sort();
+    const stableChatId = 'chat_' + ids[0].replace('@', '') + '_' + ids[1].replace('@', '');
+
+    let found = myChats.find(c => c.id === stableChatId);
+    if (!found) {
+        found = { 
+            type: 'user', 
+            id: stableChatId, // Постійний ID кімнати
+            displayName: item.displayName || item.name, 
+            username: item.username, 
+            avatar: item.avatar, 
+            online: item.online 
+        };
+        myChats.push(found);
+        localStorage.setItem('webchat_my_chats', JSON.stringify(myChats));
+    }
+    openChat(found);
+                }
                 } else {
                     let foundChan = channels.find(c => c.id === item.id);
                     if (!foundChan) {
