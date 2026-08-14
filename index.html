@@ -8,7 +8,6 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         
-        /* Мобільний контейнер (імітація телефону або адаптація на весь екран смартфона) */
         body { background-color: #090d16; color: #f8fafc; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         
         .phone-frame {
@@ -32,20 +31,19 @@
             }
         }
 
-        /* Екран авторизації / профілю */
         #auth-screen { position: absolute; inset: 0; background: #0f172a; display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
         .auth-card { background: #1e293b; padding: 25px; border-radius: 20px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 15px; }
         .auth-card h2 { text-align: center; color: #38bdf8; margin-bottom: 5px; }
         .auth-card input, .auth-card textarea { width: 100%; padding: 12px; background: #0f172a; border: 1px solid #334155; border-radius: 10px; color: #fff; font-size: 14px; outline: none; }
         .auth-card textarea { resize: none; height: 70px; }
         .auth-card button { width: 100%; padding: 12px; background: #38bdf8; border: none; border-radius: 10px; color: #0f172a; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        
         .avatar-picker { display: flex; gap: 10px; align-items: center; }
         .avatar-picker img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid #38bdf8; flex-shrink: 0; }
+        .file-btn-small { background: #334155; color: #38bdf8; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
 
-        /* Головний інтерфейс */
         .app-container { display: flex; width: 100%; height: 100%; position: relative; overflow: hidden; }
         
-        /* Екрани (Перемикання між списком чатів та активним чатом на мобільному) */
         .view-panel { position: absolute; inset: 0; display: flex; flex-direction: column; background: #0f172a; transition: transform 0.3s ease; }
         #sidebar-view { transform: translateX(0); z-index: 2; }
         #chat-view { transform: translateX(100%); z-index: 3; background: #0b132b; }
@@ -53,7 +51,6 @@
         .app-container.chat-active #sidebar-view { transform: translateX(-30%); }
         .app-container.chat-active #chat-view { transform: translateX(0); }
 
-        /* Список чатів / Пошук */
         .sidebar-header { padding: 15px; display: flex; gap: 10px; align-items: center; background: #1e293b; border-bottom: 1px solid #334155; }
         .search-input { flex: 1; padding: 10px 15px; background: #0f172a; border: 1px solid #334155; border-radius: 20px; color: #fff; outline: none; font-size: 14px; }
         .create-channel-btn { background: #10b981; border: none; color: #fff; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; flex-shrink: 0; }
@@ -71,11 +68,9 @@
         .chat-name { font-weight: 600; font-size: 15px; margin-bottom: 3px; display: flex; justify-content: space-between; color: #fff; }
         .chat-last-msg { font-size: 13px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        /* Профіль користувача внизу списку */
         .my-profile-bar { padding: 12px 15px; background: #1e293b; display: flex; align-items: center; gap: 10px; border-top: 1px solid #334155; cursor: pointer; }
         .my-profile-bar img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
 
-        /* Активний чат */
         .chat-header { padding: 12px 15px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
         .chat-header-info { display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; overflow: hidden; }
         .chat-header-info img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
@@ -87,21 +82,27 @@
         .chat-header-actions { display: flex; gap: 8px; }
         .action-btn { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 18px; padding: 5px; }
 
-        /* Повідомлення */
         .messages-container { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-        .message { max-width: 75%; padding: 10px 12px; border-radius: 12px; font-size: 14px; position: relative; line-height: 1.4; word-break: break-word; }
+        .message { max-width: 80%; padding: 10px 12px; border-radius: 12px; font-size: 14px; position: relative; line-height: 1.4; word-break: break-word; }
         .message.incoming { background: #1e293b; align-self: flex-start; border-bottom-left-radius: 2px; }
         .message.outgoing { background: #0284c7; align-self: flex-end; border-bottom-right-radius: 2px; }
         .message img { max-width: 100%; border-radius: 8px; margin-top: 5px; display: block; }
         .msg-meta { display: flex; justify-content: flex-end; gap: 4px; font-size: 10px; color: #cbd5e1; margin-top: 3px; }
 
-        /* Панель введення */
+        /* Реакції */
+        .reactions-bar { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+        .reaction-badge { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 10px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 3px; border: 1px solid rgba(255,255,255,0.1); }
+        .add-reaction-btn { background: none; border: none; color: #94a3b8; font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 8px; }
+        
+        .reaction-picker { position: absolute; background: #1e293b; border: 1px solid #334155; border-radius: 20px; padding: 5px 10px; display: flex; gap: 6px; z-index: 50; box-shadow: 0 5px 15px rgba(0,0,0,0.5); display: none; }
+        .reaction-picker span { cursor: pointer; font-size: 16px; transition: transform 0.1s; }
+        .reaction-picker span:hover { transform: scale(1.3); }
+
         .chat-input-panel { padding: 10px 15px; background: #1e293b; border-top: 1px solid #334155; display: flex; align-items: center; gap: 8px; }
         .chat-input-panel textarea { flex: 1; background: #0f172a; border: 1px solid #334155; border-radius: 20px; padding: 10px 14px; color: #fff; outline: none; resize: none; height: 40px; max-height: 100px; font-size: 14px; }
         .file-upload-label { cursor: pointer; font-size: 20px; color: #94a3b8; padding: 5px; }
         .send-btn { background: #38bdf8; border: none; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #0f172a; font-weight: bold; cursor: pointer; flex-shrink: 0; }
 
-        /* Модальні вікна */
         .modal { position: absolute; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 2000; display: none; padding: 20px; }
         .modal-content { background: #1e293b; padding: 20px; border-radius: 16px; width: 100%; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
         .modal-content h3 { color: #38bdf8; }
@@ -122,7 +123,9 @@
                 <p style="font-size: 12px; color: #94a3b8; text-align: center;">Мобільний месенджер</p>
                 <div class="avatar-picker">
                     <img id="preview-avatar" src="https://i.imgur.com/6VBx3io.png" alt="Avatar">
-                    <input type="text" id="input-avatar" placeholder="Посилання на аватарку" value="https://i.imgur.com/6VBx3io.png" oninput="updateAvatarPreview()">
+                    <input type="file" id="auth-file-input" style="display: none;" accept="image/*" onchange="handleImageUpload(this, 'preview-avatar', 'input-avatar')">
+                    <button class="file-btn-small" onclick="document.getElementById('auth-file-input').click()">З галереї</button>
+                    <input type="hidden" id="input-avatar" value="https://i.imgur.com/6VBx3io.png">
                 </div>
                 <input type="text" id="input-username" placeholder="Юзернейм (@tag)">
                 <input type="text" id="input-displayname" placeholder="Твоє ім'я">
@@ -134,15 +137,12 @@
         <!-- Основний додаток -->
         <div class="app-container" id="main-app" style="display: none;">
             
-            <!-- Панель 1: Список чатів і пошук -->
             <div class="view-panel" id="sidebar-view">
                 <div class="sidebar-header">
-                    <input type="text" class="search-input" id="search-box" placeholder="Пошук юзернейма (@tag)..." oninput="handleSearch()">
+                    <input type="text" class="search-input" id="search-box" placeholder="Пошук (@tag)..." oninput="handleSearch()">
                     <button class="create-channel-btn" onclick="openChannelModal()">+ Канал</button>
                 </div>
-                <div class="chats-list" id="chats-list">
-                    <!-- Список чатів та результати пошуку -->
-                </div>
+                <div class="chats-list" id="chats-list"></div>
                 <div class="my-profile-bar" onclick="openProfileModal()">
                     <img id="sidebar-my-avatar" src="" alt="">
                     <div class="chat-info">
@@ -152,7 +152,6 @@
                 </div>
             </div>
 
-            <!-- Панель 2: Активний чат / Канал -->
             <div class="view-panel" id="chat-view">
                 <div class="chat-header">
                     <button class="back-btn" onclick="closeChat()">‹</button>
@@ -166,13 +165,11 @@
                     <div class="chat-header-actions" id="chat-actions-bar"></div>
                 </div>
 
-                <div class="messages-container" id="messages-container">
-                    <!-- Повідомлення -->
-                </div>
+                <div class="messages-container" id="messages-container"></div>
 
                 <div class="chat-input-panel">
                     <label class="file-upload-label" for="file-input">📎</label>
-                    <input type="file" id="file-input" style="display: none;" onchange="sendFile(this)">
+                    <input type="file" id="file-input" style="display: none;" accept="image/*" onchange="sendFile(this)">
                     <textarea id="message-input" placeholder="Повідомлення..." maxlength="5000" onkeydown="handleKey(event)"></textarea>
                     <button class="send-btn" onclick="sendMessage()">➤</button>
                 </div>
@@ -181,11 +178,26 @@
         </div>
     </div>
 
+    <!-- Вибір реакцій -->
+    <div class="reaction-picker" id="reaction-picker">
+        <span onclick="addReaction('❤️')">❤️</span>
+        <span onclick="addReaction('👍')">👍</span>
+        <span onclick="addReaction('👎')">👎</span>
+        <span onclick="addReaction('😢')">😢</span>
+        <span onclick="addReaction('🔥')">🔥</span>
+        <span onclick="addReaction('💩')">💩</span>
+    </div>
+
     <!-- Модальне вікно профілю -->
     <div class="modal" id="profile-modal">
         <div class="modal-content">
             <h3>Мій профіль</h3>
-            <input type="text" id="edit-avatar" placeholder="Посилання на аватарку">
+            <div class="avatar-picker">
+                <img id="edit-preview-avatar" src="" alt="Avatar">
+                <input type="file" id="profile-file-input" style="display: none;" accept="image/*" onchange="handleImageUpload(this, 'edit-preview-avatar', 'edit-avatar')">
+                <button class="file-btn-small" onclick="document.getElementById('profile-file-input').click()">З галереї</button>
+                <input type="hidden" id="edit-avatar">
+            </div>
             <input type="text" id="edit-displayname" placeholder="Ім'я">
             <textarea id="edit-bio" placeholder="Опис"></textarea>
             <div class="modal-buttons">
@@ -195,16 +207,21 @@
         </div>
     </div>
 
-    <!-- Модальне вікно каналу -->
+    <!-- Модальне вікно створення/редагування каналу -->
     <div class="modal" id="channel-modal">
         <div class="modal-content">
-            <h3>Створити канал</h3>
+            <h3 id="channel-modal-title">Створити канал</h3>
             <input type="text" id="channel-tag" placeholder="Посилання (@channel)">
             <input type="text" id="channel-name" placeholder="Назва каналу">
-            <input type="text" id="channel-avatar" placeholder="Посилання на аватарку">
+            <div class="avatar-picker">
+                <img id="channel-preview-avatar" src="https://i.imgur.com/6VBx3io.png" alt="Avatar">
+                <input type="file" id="channel-file-input" style="display: none;" accept="image/*" onchange="handleImageUpload(this, 'channel-preview-avatar', 'channel-avatar')">
+                <button class="file-btn-small" onclick="document.getElementById('channel-file-input').click()">З галереї</button>
+                <input type="hidden" id="channel-avatar" value="https://i.imgur.com/6VBx3io.png">
+            </div>
             <div class="modal-buttons">
                 <button class="btn-cancel" onclick="closeModals()">Скасувати</button>
-                <button class="btn-save" onclick="createChannel()">Створити</button>
+                <button class="btn-save" id="channel-save-btn" onclick="saveChannel()">Створити</button>
             </div>
         </div>
     </div>
@@ -216,6 +233,8 @@
         let myChats = JSON.parse(localStorage.getItem('webchat_my_chats')) || [];
         let channels = JSON.parse(localStorage.getItem('webchat_channels')) || [];
         let searchResults = [];
+        let selectedMsgForReaction = null;
+        let editingChannelId = null;
 
         if (currentUser) {
             document.getElementById('auth-screen').style.display = 'none';
@@ -223,15 +242,28 @@
             initApp();
         }
 
-        function updateAvatarPreview() {
-            const val = document.getElementById('input-avatar').value;
-            document.getElementById('preview-avatar').src = val || 'https://i.imgur.com/6VBx3io.png';
+        function handleImageUpload(input, previewImgId, hiddenInputId) {
+            const file = input.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById(previewImgId).src = e.target.result;
+                    document.getElementById(hiddenInputId).value = e.target.result;
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function sanitizeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+            );
         }
 
         function saveProfileAndEnter() {
             const username = document.getElementById('input-username').value.trim();
             const displayName = document.getElementById('input-displayname').value.trim();
-            const avatar = document.getElementById('input-avatar').value.trim();
+            const avatar = document.getElementById('input-avatar').value;
             const bio = document.getElementById('input-bio').value.trim();
 
             if (!username || !displayName) return alert('Введіть юзернейм та ім\'я!');
@@ -262,10 +294,8 @@
         function renderChatsList() {
             const container = document.getElementById('chats-list');
             container.innerHTML = '';
-
             const searchVal = document.getElementById('search-box').value.trim();
             
-            // Якщо є пошуковий запит, показуємо результати пошуку
             if (searchVal) {
                 if (searchResults.length === 0) {
                     container.innerHTML = '<div style="padding: 20px; text-align: center; color: #64748b; font-size: 13px;">Нікого не знайдено</div>';
@@ -275,10 +305,9 @@
                 return;
             }
 
-            // Звичайний список чатів та каналів
             const allItems = [...myChats, ...channels];
             if (allItems.length === 0) {
-                container.innerHTML = '<div style="padding: 20px; text-align: center; color: #64748b; font-size: 13px;">Немає чатів. Знайдіть користувача за @tag вище!</div>';
+                container.innerHTML = '<div style="padding: 20px; text-align: center; color: #64748b; font-size: 13px;">Немає чатів. Знайдіть юзера або канал через пошук!</div>';
                 return;
             }
 
@@ -298,172 +327,23 @@
                     }
                     openChat(found);
                 } else {
-                    openChat(item);
-                }
-            };
-
-            let statusHtml = item.type === 'user' ? `<div class="status-dot ${item.online ? 'online' : ''}"></div>` : '';
-
-            el.innerHTML = `
-                <div class="user-avatar-wrap">
-                    <img src="${item.avatar}" alt="">
-                    ${statusHtml}
-                </div>
-                <div class="chat-info">
-                    <div class="chat-name">${item.name || item.displayName} ${item.type === 'channel' ? '📢' : ''}</div>
-                    <div class="chat-last-msg">${item.username || (item.type === 'channel' ? 'Канал' : '')} ${isSearchResult ? '(Натисніть для написання)' : ''}</div>
-                </div>
-            `;
-            container.appendChild(el);
-        }
-
-        function handleSearch() {
-            const query = document.getElementById('search-box').value.trim();
-            if (!query) {
-                searchResults = [];
-                renderChatsList();
-                return;
-            }
-            socket.emit('search user or channel', query);
-        }
-
-        socket.on('search result', (result) => {
-            searchResults = result ? [result] : [];
+                    let foundChan = channels.find(c => c.id === item.id);
+                    if (!foundChan) {
+                        channels.push(item);
+                        localStorage.setItem('webchat_channels', JSON.stringify(channels));
+            closeModals();
             renderChatsList();
-        });
-
-        function openChat(chatData) {
-            activeChat = chatData;
-            document.getElementById('main-app').classList.add('chat-active');
-
-            document.getElementById('active-avatar').src = chatData.avatar;
-            document.getElementById('active-title').innerText = chatData.name || chatData.displayName;
-            
-            const statusEl = document.getElementById('active-status');
-            const actionsBar = document.getElementById('chat-actions-bar');
-            actionsBar.innerHTML = '';
-
-            if (chatData.type === 'channel') {
-                statusEl.innerText = 'Канал';
-                if (chatData.owner === currentUser.id) {
-                    actionsBar.innerHTML = `<button class="action-btn" title="Створити пост" onclick="createPostPrompt()">✍️</button>`;
-                }
-                socket.emit('get channel history', { channelId: chatData.id });
-            } else {
-                statusEl.innerText = chatData.online ? 'в мережі' : 'не в мережі';
-                socket.emit('get history', { targetId: chatData.id });
-            }
         }
 
-        function closeChat() {
-            document.getElementById('main-app').classList.remove('chat-active');
-            activeChat = null;
-        }
-
-        function sendMessage() {
-            const input = document.getElementById('message-input');
-            const text = input.value.trim();
-            if (!text || !activeChat) return;
-
-            if (activeChat.type === 'channel') {
-                if (activeChat.owner !== currentUser.id) return;
-                socket.emit('channel post', { channelId: activeChat.id, text, author: currentUser.displayName });
-            } else {
-                socket.emit('chat message', {
-                    recipientId: activeChat.id,
-                    text,
-                    fileUrl: '',
-                    fileType: ''
-                });
-            }
-            input.value = '';
-        }
-
-        function createPostPrompt() {
-            const text = prompt('Введіть текст поста для каналу:');
-            if (text && activeChat) {
-                socket.emit('channel post', { channelId: activeChat.id, text, author: currentUser.displayName });
-            }
-        }
-
-        socket.on('chat message', (msg) => {
-            if (activeChat && (msg.sender_id === activeChat.id || msg.recipient_id === activeChat.id || msg.sender_id === currentUser.id)) {
-                appendMessage(msg);
-            }
-        });
-
-        socket.on('channel post', (post) => {
-            if (activeChat && activeChat.id === post.channel_id) {
-                appendMessage(post);
-            }
-        });
-
-        socket.on('load history', (messages) => {
-            const container = document.getElementById('messages-container');
-            container.innerHTML = '';
-            messages.forEach(msg => appendMessage(msg));
-        });
-
-        socket.on('load channel history', (posts) => {
-            const container = document.getElementById('messages-container');
-            container.innerHTML = '';
-            posts.forEach(post => appendMessage(post));
-        });
-
-        function appendMessage(msg) {
-            const container = document.getElementById('messages-container');
-            const isOutgoing = msg.sender_id === currentUser.id || msg.author === currentUser.displayName;
-
-            const div = document.createElement('div');
-            div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
-            
-            let content = `<div>${msg.text}</div>`;
-            if (msg.file_url) {
-                content += `<img src="${msg.file_url}" alt="media">`;
-            }
-
-            div.innerHTML = `
-                ${activeChat.type === 'channel' || !isOutgoing ? `<div style="font-size: 11px; font-weight: bold; color: #38bdf8; margin-bottom: 2px;">${msg.sender_name || msg.author || 'Автор'}</div>` : ''}
-                ${content}
-                <div class="msg-meta">
-                    <span>${new Date(msg.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                </div>
-            `;
-
-            container.appendChild(div);
-            container.scrollTop = container.scrollHeight;
-        }
-
-        function openChannelModal() { document.getElementById('channel-modal').style.display = 'flex'; }
         function openProfileModal() { 
+            document.getElementById('edit-preview-avatar').src = currentUser.avatar;
             document.getElementById('edit-avatar').value = currentUser.avatar;
             document.getElementById('edit-displayname').value = currentUser.displayName;
             document.getElementById('edit-bio').value = currentUser.bio || '';
             document.getElementById('profile-modal').style.display = 'flex'; 
         }
+
         function closeModals() { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); }
-
-        function createChannel() {
-            const tag = document.getElementById('channel-tag').value.trim();
-            const name = document.getElementById('channel-name').value.trim();
-            const avatar = document.getElementById('channel-avatar').value.trim();
-            if (!tag || !name) return alert('Заповніть поля!');
-
-            const newChannel = {
-                type: 'channel',
-                id: 'chan_' + Date.now(),
-                tag: tag.startsWith('@') ? tag : '@' + tag,
-                name,
-                avatar: avatar || 'https://i.imgur.com/6VBx3io.png',
-                owner: currentUser.id
-            };
-
-            channels.push(newChannel);
-            localStorage.setItem('webchat_channels', JSON.stringify(channels));
-            closeModals();
-            renderChatsList();
-            openChat(newChannel);
-        }
 
         function updateMyProfile() {
             currentUser.avatar = document.getElementById('edit-avatar').value;
