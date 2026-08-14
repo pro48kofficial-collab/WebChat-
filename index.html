@@ -375,12 +375,18 @@
             renderChatsList();
         });
 
-        function openChat(chat) {
+                function openChat(chat) {
             activeChat = chat;
             document.querySelector('.app-container').classList.add('chat-active');
-            document.getElementById('active-title').innerText = chat.displayName || chat.name;
-            document.getElementById('active-avatar').src = chat.avatar || 'https://i.imgur.com/6VBx3io.png';
-            document.getElementById('active-status').innerText = chat.username || '';
+            
+            // Виправляємо витягування імені та аватара для гравця
+            const chatName = chat.displayName || chat.name || chat.username || 'Гравець';
+            const chatAvatar = chat.avatar || 'https://i.imgur.com/6VBx3io.png';
+            const chatStatus = chat.username || chat.id || 'онлайн';
+
+            document.getElementById('active-title').innerText = chatName;
+            document.getElementById('active-avatar').src = chatAvatar;
+            document.getElementById('active-status').innerText = chatStatus;
             document.getElementById('messages-container').innerHTML = '';
             
             const actionsBar = document.getElementById('chat-actions-bar');
