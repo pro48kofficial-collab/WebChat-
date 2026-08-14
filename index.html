@@ -3,281 +3,587 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clidex Messenger</title>
+    <title>WebChat</title> 
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #0f141c;
-            color: #f5f5f5;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-        }
-        header {
-            background: #1e2631;
-            padding: 12px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #2f3847;
-        }
-        .status-dot {
-            height: 10px; width: 10px; background-color: #2ecc71; border-radius: 50%; display: inline-block; margin-right: 5px;
-        }
-        #chat {
-            flex-grow: 1;
-            padding: 15px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .message {
-            max-width: 70%;
-            padding: 10px 14px;
-            border-radius: 12px;
-            position: relative;
-            word-break: break-all;
-            cursor: pointer;
-        }
-        .message.remote { background: #232b38; align-self: flex-start; border-bottom-left-radius: 2px; }
-        .message.mine { background: #2b5278; align-self: flex-end; border-bottom-right-radius: 2px; }
-        .username { font-size: 12px; font-weight: bold; color: #64b5f6; margin-bottom: 3px; }
-        .text { font-size: 14px; line-height: 1.4; }
-        .reactions-box { display: flex; gap: 4px; margin-top: 5px; font-size: 12px; }
-        .reaction-badge { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 10px; }
-        
-        #form {
-            background: #1e2631;
-            padding: 10px;
-            display: flex;
-            gap: 8px;
-            border-top: 1px solid #2f3847;
-            align-items: center;
-        }
-        input, button {
-            background: #11161d;
-            border: 1px solid #2f3847;
-            color: #fff;
-            padding: 10px 14px;
-            border-radius: 8px;
-            outline: none;
-            font-size: 14px;
-        }
-        #fileInput { display: none; }
-        .file-btn { cursor: pointer; background: #2f3847; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
-        button.send-btn { background: #3d8bfd; border: none; font-weight: bold; cursor: pointer; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: #0f172a; color: #f8fafc; height: 100vh; display: flex; overflow: hidden; }
 
-        /* Контекстне меню за тапом */
-        #contextMenu {
-            display: none; position: absolute; background: #1e2631; border: 1px solid #2f3847;
-            border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 1000; overflow: hidden;
-        }
-        #contextMenu div { padding: 10px 15px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #2f3847; }
-        #contextMenu div:hover { background: #2b5278; }
+        /* Екран авторизації / профілю */
+        #auth-screen { position: fixed; inset: 0; background: #0f172a; display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .auth-card { background: #1e293b; padding: 30px; border-radius: 16px; width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 15px; }
+        .auth-card h2 { text-align: center; color: #38bdf8; margin-bottom: 5px; }
+        .auth-card input, .auth-card textarea { width: 100%; padding: 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
+        .auth-card textarea { resize: none; height: 80px; }
+        .auth-card button { width: 100%; padding: 12px; background: #38bdf8; border: none; border-radius: 8px; color: #0f172a; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .auth-card button:hover { background: #0ea5e9; }
+        .avatar-picker { display: flex; gap: 10px; align-items: center; }
+        .avatar-picker img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid #38bdf8; }
+
+        /* Головний інтерфейс */
+        .app-container { display: flex; width: 100vw; height: 100vh; }
         
-        /* Панель реакцій */
-        .reaction-picker { display: none; position: absolute; background: #1e2631; border: 1px solid #2f3847; border-radius: 20px; padding: 5px 10px; gap: 8px; z-index: 1001; }
-        .reaction-picker span { cursor: pointer; font-size: 16px; }
+        /* Ліва панель (Список чатів / Пошук) */
+        .sidebar { width: 320px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 15px; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #334155; }
+        .search-input { flex: 1; padding: 10px; background: #0f172a; border: 1px solid #334155; border-radius: 20px; color: #fff; outline: none; font-size: 13px; }
+        .create-channel-btn { background: #10b981; border: none; color: #fff; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        
+        .chats-list { flex: 1; overflow-y: auto; }
+        .chat-item { display: flex; align-items: center; gap: 12px; padding: 12px 15px; cursor: pointer; transition: 0.15s; border-bottom: 1px solid rgba(51, 65, 85, 0.4); position: relative; }
+        .chat-item:hover { background: #273548; }
+        .chat-item.active { background: #334155; }
+        
+        .user-avatar-wrap { position: relative; width: 45px; height: 45px; flex-shrink: 0; }
+        .user-avatar-wrap img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+        .status-dot { position: absolute; bottom: 2px; right: 2px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #1e293b; background: #64748b; }
+        .status-dot.online { background: #22c55e; }
+
+        .chat-info { flex: 1; overflow: hidden; }
+        .chat-name { font-weight: 600; font-size: 14px; margin-bottom: 3px; display: flex; justify-content: space-between; }
+        .chat-last-msg { font-size: 12px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Профіль користувача у лівому нижньому кутку */
+        .my-profile-bar { padding: 12px 15px; background: #0f172a; display: flex; align-items: center; gap: 10px; border-top: 1px solid #334155; cursor: pointer; }
+        .my-profile-bar img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; }
+
+        /* Права панель (Активний чат / Канал) */
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: #0b132b; }
+        .chat-header { padding: 12px 20px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+        .chat-header-info { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+        .chat-header-info img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+        .chat-header-title { font-weight: bold; font-size: 15px; }
+        .chat-header-status { font-size: 11px; color: #94a3b8; }
+        
+        .chat-header-actions { display: flex; gap: 10px; }
+        .action-btn { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 18px; padding: 5px; }
+        .action-btn:hover { color: #fff; }
+
+        /* Повідомлення */
+        .messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .message { max-width: 65%; padding: 10px 14px; border-radius: 12px; font-size: 14px; position: relative; line-height: 1.4; word-break: break-word; }
+        .message.incoming { background: #1e293b; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .message.outgoing { background: #0284c7; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .message img, .message video { max-width: 100%; border-radius: 8px; margin-top: 5px; display: block; }
+        
+        .msg-meta { display: flex; justify-content: flex-end; gap: 6px; font-size: 10px; color: #cbd5e1; margin-top: 4px; }
+        .msg-reactions { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+        .reaction-badge { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 10px; font-size: 11px; cursor: pointer; }
+
+        /* Панель введення */
+        .chat-input-panel { padding: 15px; background: #1e293b; border-top: 1px solid #334155; display: flex; align-items: center; gap: 10px; }
+        .chat-input-panel textarea { flex: 1; background: #0f172a; border: 1px solid #334155; border-radius: 20px; padding: 10px 15px; color: #fff; outline: none; resize: none; height: 40px; max-height: 120px; font-size: 14px; }
+        .file-upload-label { cursor: pointer; font-size: 20px; color: #94a3b8; padding: 5px; }
+        .file-upload-label:hover { color: #38bdf8; }
+        .send-btn { background: #38bdf8; border: none; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #0f172a; font-weight: bold; cursor: pointer; }
+
+        /* Модальні вікна (Профіль, Канали, Пересилання) */
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2000; display: none; }
+        .modal-content { background: #1e293b; padding: 25px; border-radius: 14px; width: 380px; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .modal-content h3 { color: #38bdf8; }
+        .modal-content input, .modal-content textarea { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 13px; outline: none; }
+        .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; }
+        .modal-buttons button { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; }
+        .btn-cancel { background: #334155; color: #fff; }
+        .btn-save { background: #38bdf8; color: #0f172a; }
+
+        /* Контекстне меню повідомлення */
+        .context-menu { position: absolute; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 5px 0; z-index: 1500; display: none; box-shadow: 0 5px 15px rgba(0,0,0,0.4); }
+        .context-item { padding: 8px 15px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+        .context-item:hover { background: #334155; }
     </style>
 </head>
 <body>
 
-    <header>
-        <div><span class="status-dot"></span><b>Clidex Messenger</b></div>
-        <div id="userInfo" style="font-size: 13px; color: #a0aec0;">Налаштуйте профіль</div>
-    </header>
-
-    <div id="chat"></div>
-    
-    <!-- Контекстне меню -->
-    <div id="contextMenu">
-        <div onclick="actionReply()">Переслати / Відповісти</div>
-        <div onclick="actionEdit()">Редагувати</div>
-        <div onclick="actionDelete()">Видалити</div>
-        <div onclick="showReactionPicker()">Реакції 🔥❤️👎🤡🌲🐋</div>
+    <!-- Екран авторизації -->
+    <div id="auth-screen">
+        <div class="auth-card">
+            <h2>WebChat</h2>
+            <p style="font-size: 12px; color: #94a3b8; text-align: center;">Створи свій профіль для спілкування</p>
+            <div class="avatar-picker">
+                <img id="preview-avatar" src="https://i.imgur.com/6VBx3io.png" alt="Avatar">
+                <input type="text" id="input-avatar" placeholder="Посилання на аватарку" value="https://i.imgur.com/6VBx3io.png" oninput="updateAvatarPreview()">
+            </div>
+            <input type="text" id="input-username" placeholder="Унікальний юзернейм (@tag)">
+            <input type="text" id="input-displayname" placeholder="Твоє ім'я (Нікнейм)">
+            <textarea id="input-bio" placeholder="Про себе (до 1000 символів)..." maxlength="1000"></textarea>
+            <button onclick="saveProfileAndEnter()">Увійти в WebChat</button>
+        </div>
     </div>
 
-    <!-- Вибір реакцій -->
-    <div id="reaction-picker" class="reaction-picker">
-        <span onclick="sendReaction('👍')">👍</span>
-        <span onclick="sendReaction('❤️')">❤️</span>
-        <span onclick="sendReaction('🔥')">🔥</span>
-        <span onclick="sendReaction('👎')">👎</span>
-        <span onclick="sendReaction('🤡')">🤡</span>
-        <span onclick="sendReaction('🌲')">🌲</span>
-        <span onclick="sendReaction('🐋')">🐋</span>
+    <!-- Основний додаток -->
+    <div class="app-container" id="main-app" style="display: none;">
+        <!-- Ліва колонка -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <input type="text" class="search-input" id="search-box" placeholder="Пошук юзернейма або @каналу..." oninput="handleSearch()">
+                <button class="create-channel-btn" onclick="openChannelModal()">+ Канал</button>
+            </div>
+            <div class="chats-list" id="chats-list">
+                <!-- Динамічний список чатів та каналів -->
+            </div>
+            <div class="my-profile-bar" onclick="openProfileModal()">
+                <img id="sidebar-my-avatar" src="" alt="">
+                <div class="chat-info">
+                    <div class="chat-name" id="sidebar-my-name">Мій профіль</div>
+                    <div class="chat-last-msg" id="sidebar-my-tag">@tag</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Права колонка (Чат) -->
+        <div class="chat-area" id="chat-area">
+            <div class="chat-header" id="active-chat-header" style="display: none;">
+                <div class="chat-header-info" onclick="openTargetProfile()">
+                    <img id="active-avatar" src="" alt="">
+                    <div>
+                        <div class="chat-header-title" id="active-title">Виберіть чат</div>
+                        <div class="chat-header-status" id="active-status">онлайн</div>
+                    </div>
+                </div>
+                <div class="chat-header-actions" id="chat-actions-bar">
+                    <!-- Додаткові кнопки (наприклад, заблокувати) -->
+                </div>
+            </div>
+
+            <div class="messages-container" id="messages-container">
+                <div style="margin: auto; color: #64748b; text-align: center;">Виберіть чат ліворуч або знайдіть користувача в пошуку</div>
+            </div>
+
+            <div class="chat-input-panel" id="chat-input-panel" style="display: none;">
+                <label class="file-upload-label" for="file-input">📎</label>
+                <input type="file" id="file-input" style="display: none;" onchange="sendFile(this)">
+                <textarea id="message-input" placeholder="Написати повідомлення (до 10000 символів)..." maxlength="10000" onkeydown="handleKey(event)"></textarea>
+                <button class="send-btn" onclick="sendMessage()">➤</button>
+            </div>
+        </div>
     </div>
 
-    <form id="form">
-        <input type="file" id="fileInput" />
-        <label for="fileInput" class="file-btn">📎</label>
-        <input id="usernameInput" placeholder="Нікнейм (@tag)" style="width: 100px;" required />
-        <input id="input" placeholder="Повідомлення..." autocomplete="off" />
-        <button type="submit" class="send-btn">Відправити</button>
-    </form>
+    <!-- Модальне вікно профілю / редагування -->
+    <div class="modal" id="profile-modal">
+        <div class="modal-content">
+            <h3>Мій профіль</h3>
+            <input type="text" id="edit-avatar" placeholder="Посилання на аватарку">
+            <input type="text" id="edit-displayname" placeholder="Ім'я">
+            <textarea id="edit-bio" placeholder="Опис профілю (до 1000 символів)" maxlength="1000"></textarea>
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeModals()">Скасувати</button>
+                <button class="btn-save" onclick="updateMyProfile()">Зберегти</button>
+            </div>
+        </div>
+    </div>
 
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- Модальне вікно створення каналу -->
+    <div class="modal" id="channel-modal">
+        <div class="modal-content">
+            <h3>Створити канал</h3>
+            <input type="text" id="channel-tag" placeholder="Посилання (наприклад: mynews)">
+            <input type="text" id="channel-name" placeholder="Назва каналу">
+            <input type="text" id="channel-avatar" placeholder="Посилання на аватарку каналу">
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeModals()">Скасувати</button>
+                <button class="btn-save" onclick="createChannel()">Створити</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальне вікно пересилання -->
+    <div class="modal" id="forward-modal">
+        <div class="modal-content">
+            <h3>Переслати повідомлення</h3>
+            <div id="forward-chats-list" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;"></div>
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeModals()">Скасувати</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Контекстне меню повідомлення -->
+    <div class="context-menu" id="context-menu">
+        <div class="context-item" onclick="ctxReply()">Відповісти</div>
+        <div class="context-item" onclick="ctxEdit()" id="ctx-edit-btn">Редагувати</div>
+        <div class="context-item" onclick="ctxForward()">Переслати</div>
+        <div class="context-item" onclick="ctxDelete()" id="ctx-del-btn" style="color: #ef4444;">Видалити</div>
+        <div class="context-item" onclick="ctxReaction('❤️')">❤️ Поставити реакцію</div>
+        <div class="context-item" onclick="ctxReaction('🔥')">🔥 Поставити реакцію</div>
+        <div class="context-item" onclick="ctxReaction('👍')">👍 Поставити реакцію</div>
+    </div>
+
     <script>
         const socket = io();
+        let currentUser = JSON.parse(localStorage.getItem('webchat_user')) || null;
+        let activeChat = null; // { type: 'user'|'channel', id, name, avatar, status, bio }
+        let myChats = JSON.parse(localStorage.getItem('webchat_my_chats')) || [];
+        let channels = JSON.parse(localStorage.getItem('webchat_channels')) || [];
+        let blockedUsers = JSON.parse(localStorage.getItem('webchat_blocked')) || [];
         let selectedMessageId = null;
-        let editingMessageId = null;
 
-        // Збереження ніку
-        const usernameInput = document.getElementById('usernameInput');
-        const savedName = localStorage.getItem('chat_username');
-        if (savedName) usernameInput.value = savedName;
+        if (currentUser) {
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('main-app').style.display = 'flex';
+            initApp();
+        }
 
-        usernameInput.addEventListener('input', () => {
-            const val = usernameInput.value;
-            localStorage.setItem('chat_username', val);
-            socket.emit('set profile', { username: val, displayName: val, avatar: '', status: 'онлайн' });
-        });
+        function updateAvatarPreview() {
+            const val = document.getElementById('input-avatar').value;
+            document.getElementById('preview-avatar').src = val || 'https://i.imgur.com/6VBx3io.png';
+        }
 
-        // Надсилання повідомлень або файлів
-        const form = document.getElementById('form');
-        const input = document.getElementById('input');
-        const fileInput = document.getElementById('fileInput');
+        function saveProfileAndEnter() {
+            const username = document.getElementById('input-username').value.trim();
+            const displayName = document.getElementById('input-displayname').value.trim();
+            const avatar = document.getElementById('input-avatar').value.trim();
+            const bio = document.getElementById('input-bio').value.trim();
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const name = usernameInput.value;
-            if (!name) return alert('Введіть нікнейм!');
-
-            let fileUrl = '';
-            let fileType = '';
-
-            if (fileInput.files.length > 0) {
-                const formData = new FormData();
-                formData.append('media', fileInput.files[0]);
-                const res = await fetch('/upload', { method: 'POST', body: formData });
-                const data = await res.json();
-                fileUrl = data.url;
-                fileType = data.type;
-                fileInput.value = '';
+            if (!username || !displayName) {
+                alert('Введіть юзернейм та ім\'я!');
+                return;
             }
 
-            if (input.value || fileUrl) {
-                if (editingMessageId) {
-                    socket.emit('edit message', { id: editingMessageId, newText: input.value });
-                    editingMessageId = null;
-                } else {
-                    socket.emit('chat message', { name, text: input.value, fileUrl, fileType });
+            currentUser = {
+                id: socket.id || 'user_' + Math.random().toString(36).substr(2, 9),
+                username: username.startsWith('@') ? username : '@' + username,
+                displayName,
+                avatar: avatar || 'https://i.imgur.com/6VBx3io.png',
+                bio
+            };
+
+            localStorage.setItem('webchat_user', JSON.stringify(currentUser));
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('main-app').style.display = 'flex';
+            socket.emit('set profile', currentUser);
+            initApp();
+        }
+
+        function initApp() {
+            document.getElementById('sidebar-my-avatar').src = currentUser.avatar;
+            document.getElementById('sidebar-my-name').innerText = currentUser.displayName;
+            document.getElementById('sidebar-my-tag').innerText = currentUser.username;
+            renderChatsList();
+            socket.emit('get all users');
+        }
+
+        function renderChatsList() {
+            const container = document.getElementById('chats-list');
+            container.innerHTML = '';
+
+            // Відображаємо збережені особисті чати та канали
+            const allItems = [...myChats, ...channels];
+            if (allItems.length === 0) {
+                container.innerHTML = '<div style="padding: 20px; text-align: center; color: #64748b; font-size: 13px;">Немає активних чатів. Знайдіть користувача у пошуку!</div>';
+                return;
+            }
+
+            allItems.forEach(item => {
+                const el = document.createElement('div');
+                el.className = `chat-item ${activeChat && activeChat.id === item.id ? 'active' : ''}`;
+                el.onclick = () => openChat(item);
+
+                let statusHtml = '';
+                if (item.type === 'user') {
+                    statusHtml = `<div class="status-dot ${item.online ? 'online' : ''}"></div>`;
                 }
-                input.value = '';
+
+                el.innerHTML = `
+                    <div class="user-avatar-wrap">
+                        <img src="${item.avatar}" alt="">
+                        ${statusHtml}
+                    </div>
+                    <div class="chat-info">
+                        <div class="chat-name">${item.name || item.displayName} ${item.type === 'channel' ? '📢' : ''}</div>
+                        <div class="chat-last-msg">${item.lastMsg || (item.type === 'channel' ? 'Канал' : item.username)}</div>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+        function handleSearch() {
+            const query = document.getElementById('search-box').value.trim();
+            if (!query) {
+                renderChatsList();
+                return;
             }
+
+            socket.emit('search user or channel', query);
+        }
+
+        socket.on('search result', (result) => {
+            const container = document.getElementById('chats-list');
+            container.innerHTML = '';
+
+            if (!result) {
+                container.innerHTML = '<div style="padding: 20px; text-align: center; color: #64748b; font-size: 13px;">Нічого не знайдено</div>';
+                return;
+            }
+
+            const el = document.createElement('div');
+            el.className = 'chat-item';
+            el.onclick = () => {
+                if (result.type === 'channel') {
+                    openChat(result);
+                } else {
+                    // Перевіряємо чи вже є в чатах, якщо ні — додаємо
+                    let found = myChats.find(c => c.id === result.id);
+                    if (!found) {
+                        found = { type: 'user', id: result.id, name: result.displayName, username: result.username, avatar: result.avatar, bio: result.bio, online: result.online };
+                        myChats.push(found);
+                        localStorage.setItem('webchat_my_chats', JSON.stringify(myChats));
+                    }
+                    openChat(found);
+                }
+            };
+
+            el.innerHTML = `
+                <div class="user-avatar-wrap">
+                    <img src="${result.avatar}" alt="">
+                    ${result.type === 'user' ? `<div class="status-dot ${result.online ? 'online' : ''}"></div>` : ''}
+                </div>
+                <div class="chat-info">
+                    <div class="chat-name">${result.displayName || result.name}</div>
+                    <div class="chat-last-msg">${result.username || '@channel'} (Натисніть щоб відкрити)</div>
+                </div>
+            `;
+            container.appendChild(el);
         });
 
-        // Рендер повідомлень
-        const chat = document.getElementById('chat');
+        function openChat(chatData) {
+            activeChat = chatData;
+            renderChatsList();
+
+            document.getElementById('active-chat-header').style.display = 'flex';
+            document.getElementById('chat-input-panel').style.display = 'flex';
+            document.getElementById('active-avatar').src = chatData.avatar;
+            document.getElementById('active-title').innerText = chatData.name || chatData.displayName;
+            
+            const statusEl = document.getElementById('active-status');
+            const actionsBar = document.getElementById('chat-actions-bar');
+            actionsBar.innerHTML = '';
+
+            if (chatData.type === 'channel') {
+                statusEl.innerText = 'Канал • Підписники';
+                if (chatData.owner === currentUser.id) {
+                    actionsBar.innerHTML = `<button class="action-btn" title="Створити пост" onclick="createPostPrompt()">✍️</button>`;
+                }
+            } else {
+                statusEl.innerText = chatData.online ? 'в мережі' : 'не в мережі';
+                const isBlocked = blockedUsers.includes(chatData.id);
+                actionsBar.innerHTML = `<button class="action-btn" title="${isBlocked ? 'Розблокувати' : 'Заблокувати'}" onclick="toggleBlockUser('${chatData.id}')">${isBlocked ? '🔓' : '🚫'}</button>`;
+                
+                socket.emit('get history', { targetId: chatData.id });
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            if (!text || !activeChat) return;
+
+            if (activeChat.type === 'channel') {
+                // Тільки власник може постить в канал
+                if (activeChat.owner !== currentUser.id) return;
+                socket.emit('channel post', { channelId: activeChat.id, text, author: currentUser.displayName });
+            } else {
+                if (blockedUsers.includes(activeChat.id)) {
+                    alert('Користувача заблоковано!');
+                    return;
+                }
+                socket.emit('chat message', {
+                    recipientId: activeChat.id,
+                    text,
+                    fileUrl: '',
+                    fileType: ''
+                });
+            }
+            input.value = '';
+        }
+
+        function sendFile(inputElement) {
+            const file = inputElement.files[0];
+            if (!file || !activeChat) return;
+
+            const formData = new FormData();
+            formData.append('media', file);
+
+            fetch('/upload', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.url) {
+                        socket.emit('chat message', {
+                            recipientId: activeChat.id,
+                            text: '',
+                            fileUrl: data.url,
+                            fileType: data.type
+                        });
+                    }
+                })
+                .catch(err => console.error(err));
+        }
+
+        socket.on('chat message', (msg) => {
+            if (activeChat && (msg.sender_id === activeChat.id || msg.recipient_id === activeChat.id || msg.sender_id === currentUser.id)) {
+                appendMessage(msg);
+            }
+        });
 
         socket.on('load history', (messages) => {
-            chat.innerHTML = '';
+            const container = document.getElementById('messages-container');
+            container.innerHTML = '';
             messages.forEach(msg => appendMessage(msg));
         });
 
-        socket.on('chat message', (msg) => {
-            appendMessage(msg);
-        });
-
         function appendMessage(msg) {
-            const item = document.createElement('div');
-            item.classList.add('message');
-            item.classList.add(msg.sender_id === socket.id ? 'mine' : 'remote');
-            item.setAttribute('data-id', msg.id);
+            const container = document.getElementById('messages-container');
+            const isOutgoing = msg.sender_id === currentUser.id;
 
-            let contentHtml = `<div class="username">${msg.sender_name}</div><div class="text">${msg.text}</div>`;
+            const div = document.createElement('div');
+            div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
+            div.dataset.id = msg.id;
+            
+            let content = `<div>${msg.text}</div>`;
             if (msg.file_url) {
                 if (msg.file_type === 'image') {
-                    contentHtml += `<img src="${msg.file_url}" style="max-width:200px; border-radius:8px; margin-top:5px;" />`;
+                    content += `<img src="${msg.file_url}" alt="media">`;
                 } else {
-                    contentHtml += `<div><a href="${msg.file_url}" target="_blank" style="color:#64b5f6;">📁 Завантажити файл</a></div>`;
+                    content += `<a href="${msg.file_url}" target="_blank" style="color: #38bdf8;">📂 Завантажити файл</a>`;
                 }
             }
 
-            // Рендер реакцій
-            let reactionsHtml = '<div class="reactions-box">';
-            const counts = {};
-            if (msg.reactions) {
-                Object.values(msg.reactions).forEach(emoji => { counts[emoji] = (counts[emoji] || 0) + 1; });
-                Object.entries(counts).forEach(([emoji, count]) => {
-                    reactionsHtml += `<span class="reaction-badge">${emoji} ${count}</span>`;
-                });
-            }
-            reactionsHtml += '</div>';
+            div.innerHTML = `
+                ${!isOutgoing ? `<div style="font-size: 11px; font-weight: bold; color: #38bdf8; margin-bottom: 2px;">${msg.sender_name}</div>` : ''}
+                ${content}
+                <div class="msg-meta">
+                    <span>${new Date(msg.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                </div>
+            `;
 
-            item.innerHTML = contentHtml + reactionsHtml;
+            div.oncontextmenu = (e) => {
+                e.preventDefault();
+                openContextMenu(e.clientX, e.clientY, msg.id, isOutgoing);
+            };
 
-            // Довгий тап / клік для контекстного меню
-            let pressTimer;
-            item.addEventListener('mousedown', (e) => {
-                pressTimer = setTimeout(() => openContextMenu(e, msg.id), 600);
-            });
-            item.addEventListener('mouseup', () => clearTimeout(pressTimer));
-            item.touchStart = item.addEventListener('touchstart', (e) => {
-                pressTimer = setTimeout(() => openContextMenu(e.touches[0], msg.id), 600);
-            });
-
-            chat.appendChild(item);
-            chat.scrollTop = chat.scrollHeight;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
         }
 
-        // Контекстне меню логіка
-        const contextMenu = document.getElementById('contextMenu');
-        const reactionPicker = document.getElementById('reaction-picker');
+        // Контекстне меню
+        function openContextMenu(x, y, msgId, isOutgoing) {
+            selectedMessageId = msgId;
+            const menu = document.getElementById('context-menu');
+            menu.style.left = `${x}px`;
+            menu.style.top = `${y}px`;
+            menu.style.display = 'block';
 
-        function openContextMenu(e, id) {
-            selectedMessageId = id;
-            contextMenu.style.display = 'block';
-            contextMenu.style.left = `${e.pageX}px`;
-            contextMenu.style.top = `${e.pageY}px`;
-            reactionPicker.style.display = 'none';
+            document.getElementById('ctx-edit-btn').style.display = isOutgoing ? 'block' : 'none';
+            document.getElementById('ctx-del-btn').style.display = isOutgoing ? 'block' : 'none';
         }
 
-        window.addEventListener('click', () => {
-            contextMenu.style.display = 'none';
-            reactionPicker.style.display = 'none';
-        });
+        window.onclick = () => { document.getElementById('context-menu').style.display = 'none'; };
 
-        function actionDelete() {
-            if (selectedMessageId) socket.emit('delete message', selectedMessageId);
+        function ctxDelete() {
+            socket.emit('delete message', selectedMessageId);
         }
 
-        function actionEdit() {
-            const msgEl = document.querySelector(`[data-id='${selectedMessageId}'] .text`);
-            if (msgEl) {
-                input.value = msgEl.textContent;
-                editingMessageId = selectedMessageId;
-                input.focus();
-            }
-        }
-
-        function showReactionPicker() {
-            contextMenu.style.display = 'none';
-            reactionPicker.style.display = 'flex';
-        }
-
-        function sendReaction(emoji) {
-            if (selectedMessageId) {
-                socket.emit('add reaction', { id: selectedMessageId, emoji });
-            }
-        }
-
-        socket.on('message deleted', (id) => {
-            const el = document.querySelector(`[data-id='${id}']`);
+        socket.on('message deleted', (msgId) => {
+            const el = document.querySelector(`[data-id='${msgId}']`);
             if (el) el.remove();
         });
 
-        socket.on('message edited', (data) => {
-            const el = document.querySelector(`[data-id='${data.id}'] .text`);
-            if (el) el.textContent = data.newText;
-        });
+        function ctxReaction(emoji) {
+            socket.emit('add reaction', { id: selectedMessageId, emoji });
+        }
 
-        socket.on('update reactions', (data) => {
-            // Перезавантажуємо або оновлюємо реакції (простіший варіант — перезапит чи легкий апдейт DOM)
-            location.reload(); 
-        });
+        function toggleBlockUser(userId) {
+            if (blockedUsers.includes(userId)) {
+                blockedUsers = blockedUsers.filter(id => id !== userId);
+            } else {
+                blockedUsers.push(userId);
+                // Очищаємо локальну історію чату для себе
+                document.getElementById('messages-container').innerHTML = '<div style="margin: auto; color: #ef4444;">Користувача заблоковано. Історію видалено.</div>';
+            }
+            localStorage.setItem('webchat_blocked', JSON.stringify(blockedUsers));
+            openChat(activeChat);
+        }
+
+        function openChannelModal() {
+            document.getElementById('channel-modal').style.display = 'flex';
+        }
+
+        function createChannel() {
+            const tag = document.getElementById('channel-tag').value.trim();
+            const name = document.getElementById('channel-name').value.trim();
+            const avatar = document.getElementById('channel-avatar').value.trim();
+
+            if (!tag || !name) return alert('Заповніть поля!');
+
+            const newChannel = {
+                type: 'channel',
+                id: 'chan_' + Date.now(),
+                tag: tag.startsWith('@') ? tag : '@' + tag,
+                name,
+                avatar: avatar || 'https://i.imgur.com/6VBx3io.png',
+                owner: currentUser.id
+            };
+
+            channels.push(newChannel);
+            localStorage.setItem('webchat_channels', JSON.stringify(channels));
+            closeModals();
+            renderChatsList();
+            openChat(newChannel);
+        }
+
+        function closeModals() {
+            document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+        }
+
+        function openProfileModal() {
+            document.getElementById('edit-avatar').value = currentUser.avatar;
+            document.getElementById('edit-displayname').value = currentUser.displayName;
+            document.getElementById('edit-bio').value = currentUser.bio || '';
+            document.getElementById('profile-modal').style.display = 'flex';
+        }
+
+        function updateMyProfile() {
+            currentUser.avatar = document.getElementById('edit-avatar').value;
+            currentUser.displayName = document.getElementById('edit-displayname').value;
+            currentUser.bio = document.getElementById('edit-bio').value;
+            localStorage.setItem('webchat_user', JSON.stringify(currentUser));
+            closeModals();
+            initApp();
+        }
+
+                function handleKey(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        async function donateWithStars() {
+            if (window.Telegram && window.Telegram.WebApp) {
+                const tg = window.Telegram.WebApp;
+                tg.ready();
+
+                try {
+                    const response = await fetch('/create-invoice', { method: 'POST' });
+                    const data = await response.json();
+
+                    if (data.invoiceLink) {
+                        tg.openInvoice(data.invoiceLink, (status) => {
+                            if (status === 'paid') {
+                                alert('Дякуємо за донат! Зірки зараховані ⭐');
+                            }
+                        });
+                    } else {
+                        alert('Помилка створення інвойсу на сервері');
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            } else {
+                alert('Донати за зірки доступні тільки всередині Telegram Mini App!');
+            }
+        }
     </script>
 </body>
 </html>
