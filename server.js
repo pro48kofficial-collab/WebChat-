@@ -5,9 +5,11 @@ const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    maxHttpBufferSize: 1e7
+});
 
-app.use(express.json({ limit: '15mb' })); // Збільшено ліміт для картинок/файлів
+app.use(express.json({ limit: '15mb' }));
 app.use(express.static(__dirname));
 
 const db = new sqlite3.Database('./chat.db', (err) => {
@@ -38,39 +40,50 @@ db.serialize(() => {
     )`);
 });
 
-const activeUsers = {}; // username -> socket.id
+const activeUsers = {};
 
 io.on('connection', (socket) => {
     console.log(`Підключення: ${socket.id}`);
 
-    // Авторизація / Реєстрація
     socket.on('register', (data) => {
         const { username, nickname, avatar } = data;
-        db.get(`SELECT * FROM users WHERE username = ?`, [username], (err, row) => {
-            const defaultAvatar = avatar || 'https://i.imgur.com/6VBx3io.png';
+        if (!username || !nickname) {
+            socket.emit('register_error', 'Заповніть юзернейм та нікнейм!');
+            return;
+        }
+
+        const cleanUsername = username.startsWith('@') ? username : '@' + username;
+        const defaultAvatar = avatar || 'https://i.imgur.com/6VBx3io.png';
+
+        db.get(`SELECT * FROM users WHERE username = ?`, [cleanUsername], (err, row) => {
             if (row) {
-                db.run(`UPDATE users SET nickname = ?, avatar = ? WHERE username = ?`, [nickname, avatar || row.avatar, username], () => {
-                    activeUsers[username] = socket.id;
-                    socket.emit('register_success', { username, nickname, avatar: avatar || row.avatar });
-                    io.emit('status_update', { username, online: true });
-                });
-            } else {
-                db.run(`INSERT INTO users (username, nickname, avatar) VALUES (?, ?, ?)`, [username, nickname, defaultAvatar], (err) => {
-                    if (err) {
-                        socket.emit('register_error', 'Помилка реєстрації!');
+                const finalAvatar = avatar || row.avatar;
+                db.run(`UPDATE users SET nickname = ?, avatar = ? WHERE username = ?`, [nickname, finalAvatar, cleanUsername], (updateErr) => {
+                    if (updateErr) {
+                        socket.emit('register_error', 'Помилка оновлення.');
                         return;
                     }
-                    activeUsers[username] = socket.id;
-                    socket.emit('register_success', { username, nickname, avatar: defaultAvatar });
-                    io.emit('status_update', { username, online: true });
+                    activeUsers[cleanUsername] = socket.id;
+                    socket.emit('register_success', { username: cleanUsername, nickname, avatar: finalAvatar });
+                    io.emit('status_update', { username: cleanUsername, online: true });
+                });
+            } else {
+                db.run(`INSERT INTO users (username, nickname, avatar) VALUES (?, ?, ?)`, [cleanUsername, nickname, defaultAvatar], (insertErr) => {
+                    if (insertErr) {
+                        socket.emit('register_error', 'Помилка збереження користувача.');
+                        return;
+                    }
+                    activeUsers[cleanUsername] = socket.id;
+                    socket.emit('register_success', { username: cleanUsername, nickname, avatar: defaultAvatar });
+                    io.emit('status_update', { username: cleanUsername, online: true });
                 });
             }
         });
     });
 
-    // Зміна профілю (зміна юзернейму з оновленням у базі та історії)
     socket.on('update_profile', (data) => {
-        const { oldUsername, newUsername, nickname, avatar } = data;
+        let { oldUsername, newUsername, nickname, avatar } = data;
+        newUsername = newUsername.startsWith('@') ? newUsername : '@' + newUsername;
         
         db.get(`SELECT * FROM users WHERE username = ?`, [newUsername], (err, row) => {
             if (row && oldUsername !== newUsername) {
@@ -88,7 +101,7 @@ io.on('connection', (socket) => {
                     
                     delete activeUsers[oldUsername];
                 } else {
-                    db.run(`UPDATE users SET nickname = ?, avatar = ? WHERE username = ?`, [nickname, avatar, username]);
+                    db.run(`UPDATE users SET nickname = ?, avatar = ? WHERE username = ?`, [nickname, avatar, oldUsername]);
                 }
                 
                 activeUsers[newUsername] = socket.id;
@@ -97,18 +110,9 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Перевірка статусів онлайн
-    socket.on('check_online', (usernames) => {
-        const statuses = {};
-        usernames.forEach(u => {
-            statuses[u] = !!activeUsers[u];
-        });
-        socket.emit('online_statuses', statuses);
-    });
-
-    // Пошук користувача
     socket.on('search_user', (searchName) => {
-        db.get(`SELECT username, nickname, avatar FROM users WHERE username = ?`, [searchName], (err, user) => {
+        const cleanSearch = searchName.startsWith('@') ? searchName : '@' + searchName;
+        db.get(`SELECT username, nickname, avatar FROM users WHERE username = ?`, [cleanSearch], (err, user) => {
             if (user) {
                 socket.emit('user_found', { ...user, online: !!activeUsers[user.username] });
             } else {
@@ -117,7 +121,6 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Список чатів
     socket.on('get_chats', (username) => {
         db.all(`
             SELECT DISTINCT 
@@ -143,7 +146,6 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Отримання повідомлень
     socket.on('get_messages', (data) => {
         const { user1, user2 } = data;
         db.all(`
@@ -155,7 +157,6 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Надсилання повідомлень (з підтримкою файлів/фото)
     socket.on('send_message', (data) => {
         const { sender, recipient, text, fileData, fileName } = data;
         
@@ -188,7 +189,6 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Блокування чату
     socket.on('block_user', (data) => {
         const { user1, user2 } = data;
         db.run(`INSERT INTO blocks (user1, user2) VALUES (?, ?)`, [user1, user2], () => {
@@ -211,7 +211,6 @@ io.on('connection', (socket) => {
                 break;
             }
         }
-        console.log(`Відключення: ${socket.id}`);
     });
 });
 
@@ -219,4 +218,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Сервер працює: http://localhost:${PORT}`);
 });
-    
+        
