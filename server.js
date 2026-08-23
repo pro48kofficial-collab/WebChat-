@@ -7,62 +7,92 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname)));
+// Роздаємо файли прямо з кореневої папки
+app.use(express.static(__dirname));
 
-// Зберігаємо користувачів за їхнім постійним ID (юзернеймом)
-const registeredUsers = {}; // ключ — це id юзера (наприклад, "@pro")
+// База даних у пам'яті
+const users = {};       // socket.id -> { username, nickname, avatar }
+const usernames = {};   // username -> socket.id
+const blocks = new Set(); // пари заблокованих ("user1:user2")
 
 io.on('connection', (socket) => {
-    console.log(`Підключився сокет: ${socket.id}`);
+    console.log(`Користувач підключився: ${socket.id}`);
 
-    // Збереження або оновлення профілю
-    socket.on('set profile', (user) => {
-        registeredUsers[user.id] = {
-            id: user.id,
-            username: user.username,
-            displayName: user.displayName,
-            avatar: user.avatar,
-            bio: user.bio,
-            online: true,
-            socketId: socket.id // запам'ятовуємо поточний сокет
+    // Реєстрація
+    socket.on('register', (data) => {
+        const { username, nickname, avatar } = data;
+        if (usernames[username]) {
+            socket.emit('register_error', 'Цей юзернейм вже зайнятий!');
+            return;
+        }
+
+        users[socket.id] = { username, nickname, avatar: avatar || 'https://i.imgur.com/6VBx3io.png' };
+        usernames[username] = socket.id;
+        socket.emit('register_success', users[socket.id]);
+    });
+
+    // Пошук користувача
+    socket.on('search_user', (searchName) => {
+        const targetSocketId = usernames[searchName];
+        if (targetSocketId && targetSocketId !== socket.id) {
+            socket.emit('user_found', users[targetSocketId]);
+        } else {
+            socket.emit('user_not_found');
+        }
+    });
+
+    // Надсилання повідомлення
+    socket.on('send_message', (data) => {
+        const { recipientUsername, text } = data;
+        const sender = users[socket.id];
+        const recipientSocketId = usernames[recipientUsername];
+
+        if (!sender || !recipientSocketId) return;
+
+        // Перевірка на блокування
+        const blockKey1 = `${sender.username}:${recipientUsername}`;
+        const blockKey2 = `${recipientUsername}:${sender.username}`;
+        if (blocks.has(blockKey1) || blocks.has(blockKey2)) return;
+
+        const messageData = {
+            id: Date.now().toString(),
+            sender: sender.username,
+            text,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
-        console.log(`Профіль оновлено: ${user.username}`);
+
+        io.to(recipientSocketId).emit('new_message', messageData);
+        socket.emit('new_message', messageData);
     });
 
-    // Пошук користувачів
-    socket.on('search users', (query) => {
-        const lowerQuery = query.toLowerCase();
-        const results = Object.values(registeredUsers).filter(user => 
-            user.username.toLowerCase().includes(lowerQuery) || 
-            user.displayName.toLowerCase().includes(lowerQuery)
-        );
-        socket.emit('search results', results);
-    });
+    // Блокування (видалення чату для обох)
+    socket.on('block_user', (targetUsername) => {
+        const sender = users[socket.id];
+        const targetSocketId = usernames[targetUsername];
+        if (!sender) return;
 
-    // Приєднання до кімнати чату
-    socket.on('join chat', (chatId) => {
-        socket.join(chatId);
-    });
+        blocks.add(`${sender.username}:${targetUsername}`);
+        blocks.add(`${targetUsername}:${sender.username}`);
 
-    // Обмін повідомленнями
-    socket.on('chat message', (msgData) => {
-        io.to(msgData.chatId).emit('chat message', msgData);
+        socket.emit('chat_blocked');
+        if (targetSocketId) {
+            io.to(targetSocketId).emit('chat_blocked');
+        }
     });
 
     // Відключення
     socket.on('disconnect', () => {
-        console.log(`Відключився сокет: ${socket.id}`);
-        // Шукаємо користувача за socketId і ставимо оффлайн
-        for (let userId in registeredUsers) {
-            if (registeredUsers[userId].socketId === socket.id) {
-                registeredUsers[userId].online = false;
-            }
+        const user = users[socket.id];
+        if (user) {
+            delete usernames[user.username];
+            delete users[socket.id];
         }
+        console.log(`Користувач вийшов: ${socket.id}`);
     });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Сервер працює на http://localhost:${PORT}`);
+    console.log(`Сервер запущено: http://localhost:${PORT}`);
 });
-    
+            
