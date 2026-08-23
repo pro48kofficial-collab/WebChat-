@@ -10,7 +10,7 @@
         .screen { width: 95vw; height: 95vh; background: #1e293b; border-radius: 12px; display: flex; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
         .hidden { display: none !important; }
 
-        /* Auth */
+        /* Auth & Profile Modals */
         #auth-screen { justify-content: center; align-items: center; }
         .card { background: #334155; padding: 30px; border-radius: 12px; width: 350px; display: flex; flex-direction: column; gap: 15px; align-items: center; }
         .card input, .card button { width: 100%; padding: 12px; border-radius: 8px; border: none; outline: none; }
@@ -20,18 +20,26 @@
         .avatar-picker img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #3b82f6; }
         .error { color: #ef4444; font-size: 14px; text-align: center; }
 
-        /* Telegram-style Layout */
+        /* Layout */
         .sidebar { width: 350px; background: #0f172a; border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 15px; gap: 15px; transition: 0.3s; }
-        .profile-info { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid #334155; }
-        .profile-info img { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; }
+        .profile-info { display: flex; align-items: center; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid #334155; }
+        .user-meta { display: flex; align-items: center; gap: 10px; }
+        .user-meta img { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; }
+        .profile-btn { background: #334155; border: none; padding: 8px 12px; border-radius: 6px; color: white; cursor: pointer; font-size: 12px; }
+        
         .search-box { display: flex; gap: 5px; }
         .search-box input { flex: 1; padding: 10px; border-radius: 6px; border: none; background: #1e293b; color: white; }
         .search-box button { background: #3b82f6; border: none; padding: 10px 15px; border-radius: 6px; color: white; cursor: pointer; }
 
         #chats-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
-        .chat-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; cursor: pointer; background: #1e293b; transition: 0.2s; }
+        .chat-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; cursor: pointer; background: #1e293b; transition: 0.2s; position: relative; }
         .chat-item:hover { background: #334155; }
         .chat-item img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+        
+        /* Online Status Indicator */
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #64748b; display: inline-block; border: 2px solid #1e293b; }
+        .status-dot.online { background: #22c55e; }
+        .chat-item .status-dot { position: absolute; left: 38px; bottom: 8px; }
 
         .chat-area { flex: 1; display: flex; flex-direction: column; background: #1e293b; transition: transform 0.3s ease; }
         #chat-header { padding: 15px; background: #334155; display: flex; justify-content: space-between; align-items: center; }
@@ -41,12 +49,14 @@
         #messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
         .message { background: #334155; padding: 10px 14px; border-radius: 10px; max-width: 65%; word-break: break-word; }
         .message.me { background: #2563eb; align-self: flex-end; }
+        .message img { max-width: 200px; border-radius: 6px; margin-top: 5px; display: block; }
+        .message a { color: #93c5fd; display: block; margin-top: 5px; font-size: 13px; }
         
         #chat-input-area { padding: 15px; background: #334155; display: flex; gap: 10px; align-items: center; }
         #chat-input-area input[type="text"] { flex: 1; padding: 12px; border-radius: 8px; border: none; background: #1e293b; color: white; }
         #chat-input-area button { background: #3b82f6; border: none; padding: 12px 18px; border-radius: 8px; color: white; cursor: pointer; }
+        .attach-btn { background: #475569 !important; font-size: 16px; }
 
-        /* Responsive Telegram style for mobile */
         @media(max-width: 768px) {
             .screen { width: 100vw; height: 100vh; border-radius: 0; }
             .sidebar { width: 100%; position: absolute; height: 100%; z-index: 2; }
@@ -63,7 +73,7 @@
             <h2>Реєстрація у WebChat</h2>
             <label class="avatar-picker">
                 <img id="preview-avatar" src="https://i.imgur.com/6VBx3io.png" alt="Аватар">
-                <span style="font-size: 12px; color: #94a3b8;">Натисніть, щоб обрати фото</span>
+                <span style="font-size: 12px; color: #94a3b8;">Оберіть фото</span>
                 <input type="file" id="reg-avatar-file" accept="image/*" style="display: none;">
             </label>
             <input type="text" id="reg-username" placeholder="Юзернейм (напр. @pro)">
@@ -73,15 +83,40 @@
         </div>
     </div>
 
+    <!-- Модальне вікно профілю -->
+    <div id="profile-screen" class="screen hidden" style="justify-content:center; align-items:center; position:absolute; z-index:10; background:rgba(15, 23, 42, 0.9);">
+        <div class="card">
+            <h2>Редагувати профіль</h2>
+            <label class="avatar-picker">
+                <img id="edit-preview-avatar" src="" alt="Аватар">
+                <span style="font-size: 12px; color: #94a3b8;">Змінити фото</span>
+                <input type="file" id="edit-avatar-file" accept="image/*" style="display: none;">
+            </label>
+            <input type="text" id="edit-username" placeholder="Юзернейм">
+            <input type="text" id="edit-nickname" placeholder="Нікнейм">
+            <div style="display: flex; gap: 10px; width: 100%;">
+                <button id="save-profile-btn" style="background: #22c55e;">Зберегти</button>
+                <button id="cancel-profile-btn" style="background: #64748b;">Назад</button>
+            </div>
+            <p id="profile-error" class="error"></p>
+        </div>
+    </div>
+
     <!-- Головний екран чату -->
     <div id="chat-screen" class="screen hidden">
         <div id="sidebar" class="sidebar">
             <div class="profile-info">
-                <img id="my-avatar" src="" alt="Avatar">
-                <div>
-                    <h4 id="my-nickname"></h4>
-                    <span id="my-username" style="font-size: 13px; color: #94a3b8;"></span>
+                <div class="user-meta">
+                    <div style="position:relative;">
+                        <img id="my-avatar" src="" alt="Avatar">
+                        <span id="my-status-dot" class="status-dot online"></span>
+                    </div>
+                    <div>
+                        <h4 id="my-nickname"></h4>
+                        <span id="my-username" style="font-size: 12px; color: #94a3b8;"></span>
+                    </div>
                 </div>
+                <button id="open-profile-btn" class="profile-btn">⚙ Профіль</button>
             </div>
             <div class="search-box">
                 <input type="text" id="search-input" placeholder="Пошук за юзом (@...)">
@@ -96,12 +131,21 @@
             <div id="chat-header" class="hidden">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <button id="back-btn" class="back-btn">⬅</button>
-                    <span id="chat-with-title" style="font-weight: bold;">Оберіть чат</span>
+                    <div style="position:relative;">
+                        <img id="chat-header-avatar" src="" style="width:350px; width:35px; height:35px; border-radius:50%; object-fit:cover;">
+                        <span id="header-status-dot" class="status-dot"></span>
+                    </div>
+                    <div>
+                        <span id="chat-with-title" style="font-weight: bold; display:block;">Оберіть чат</span>
+                        <span id="chat-with-status" style="font-size: 11px; color: #94a3b8;"></span>
+                    </div>
                 </div>
                 <button id="block-btn" class="danger-btn">Заблокувати</button>
             </div>
             <div id="messages-container"></div>
             <div id="chat-input-area" class="hidden">
+                <input type="file" id="file-input" style="display: none;">
+                <button id="attach-btn" class="attach-btn">📎</button>
                 <input type="text" id="message-input" placeholder="Напишіть повідомлення...">
                 <button id="send-btn">➤</button>
             </div>
@@ -114,49 +158,159 @@
         let currentUser = null;
         let currentChatUser = null;
         let base64Avatar = 'https://i.imgur.com/6VBx3io.png';
+        let editBase64Avatar = '';
+        let selectedFile = null;
 
-        // Вибір аватарки з галереї пристрою
+        // Перевірка збереженої сесії (щоб не реєструватись заново)
+        const savedUsername = localStorage.getItem('webchat_username');
+        if (savedUsername) {
+            socket.emit('register', { username: savedUsername, nickname: localStorage.getItem('webchat_nickname') || 'Користувач', avatar: localStorage.getItem('webchat_avatar') });
+        }
+
+        // Вибір аватарки при реєстрації
         document.getElementById('reg-avatar-file').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
                 const reader = new FileReader();
-                reader.onload = function(event) {
-                    base64Avatar = event.target.result;
+                reader.onload = (e) => {
+                    base64Avatar = e.target.result;
                     document.getElementById('preview-avatar').src = base64Avatar;
                 };
                 reader.readAsDataURL(file);
             }
         });
 
-        const authScreen = document.getElementById('auth-screen');
-        const chatScreen = document.getElementById('chat-screen');
-        const regBtn = document.getElementById('reg-btn');
-        const authError = document.getElementById('auth-error');
-
-        regBtn.addEventListener('click', () => {
+        document.getElementById('reg-btn').addEventListener('click', () => {
             const username = document.getElementById('reg-username').value.trim();
             const nickname = document.getElementById('reg-nickname').value.trim();
-
             if (!username || !nickname) {
-                authError.textContent = 'Заповніть юзернейм та нікнейм!';
+                document.getElementById('auth-error').textContent = 'Заповніть юзернейм та нікнейм!';
                 return;
             }
             socket.emit('register', { username, nickname, avatar: base64Avatar });
         });
 
-        socket.on('register_error', (msg) => { authError.textContent = msg; });
+        socket.on('register_error', (msg) => { 
+            document.getElementById('auth-error').textContent = msg;
+            document.getElementById('profile-error').textContent = msg;
+        });
+
         socket.on('register_success', (user) => {
             currentUser = user;
-            document.getElementById('my-avatar').src = user.avatar;
-            document.getElementById('my-nickname').textContent = user.nickname;
-            document.getElementById('my-username').textContent = user.username;
+            localStorage.setItem('webchat_username', user.username);
+            localStorage.setItem('webchat_nickname', user.nickname);
+            localStorage.setItem('webchat_avatar', user.avatar);
 
-            authScreen.classList.add('hidden');
-            chatScreen.classList.remove('hidden');
+            updateMyProfileUI();
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('chat-screen').classList.remove('hidden');
             loadChats();
         });
 
-        // Завантаження списку попередніх чатів
+        function updateMyProfileUI() {
+            document.getElementById('my-avatar').src = currentUser.avatar;
+            document.getElementById('my-nickname').textContent = currentUser.nickname;
+            document.getElementById('my-username').textContent = currentUser.username;
+        }
+
+        // Кнопка Профіль
+        document.getElementById('open-profile-btn').addEventListener('click', () => {
+            document.getElementById('edit-username').value = currentUser.username;
+            document.getElementById('edit-nickname').value = currentUser.nickname;
+            editBase64Avatar = currentUser.avatar;
+            document.getElementById('edit-preview-avatar').src = currentUser.avatar;
+            document.getElementById('profile-screen').classList.remove('hidden');
+        });
+
+        document.getElementById('cancel-profile-btn').addEventListener('click', () => {
+            document.getElementById('profile-screen').classList.add('hidden');
+        });
+
+        document.getElementById('edit-avatar-file').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    editBase64Avatar = e.target.result;
+                    document.getElementById('edit-preview-avatar').src = editBase64Avatar;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('save-profile-btn').addEventListener('click', () => {
+            const newUsername = document.getElementById('edit-username').value.trim();
+            const nickname = document.getElementById('edit-nickname').value.trim();
+            if (!newUsername || !nickname) return;
+
+            socket.emit('update_profile', {
+                oldUsername: currentUser.username,
+                newUsername,
+                nickname,
+                avatar: editBase64Avatar
+            });
+        });
+
+        socket.on('profile_updated', (user) => {
+            currentUser = user;
+            localStorage.setItem('webchat_username', user.username);
+            localStorage.setItem('webchat_nickname', user.nickname);
+            localStorage.setItem('webchat_avatar', user.avatar);
+
+            updateMyProfileUI();
+            document.getElementById('profile-screen').classList.add('hidden');
+            loadChats();
+            if (currentChatUser) openChat({ username: currentChatUser });
+        });
+
+        // Завантаження файлів / фото
+        document.getElementById('attach-btn').addEventListener('click', () => {
+            document.getElementById('file-input').click();
+        });
+
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    selectedFile = {
+                        data: event.target.result,
+                        name: file.name,
+                        type: file.type
+                    };
+                    document.getElementById('message-input').placeholder = `Прикріплено: ${file.name}`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Пошук
+        document.getElementById('search-btn').addEventListener('click', () => {
+            const query = document.getElementById('search-input').value.trim();
+            if (query) socket.emit('search_user', query);
+        });
+
+        socket.on('user_found', (user) => {
+            const resultDiv = document.getElementById('search-result');
+            resultDiv.innerHTML = `
+                <div class="chat-item" style="background:#334155; margin-top:5px;">
+                    <img src="${user.avatar}">
+                    <span>${user.nickname} (${user.username})</span>
+                    <span class="status-dot ${user.online ? 'online' : ''}"></span>
+                </div>
+            `;
+            resultDiv.querySelector('.chat-item').onclick = () => {
+                openChat(user);
+                resultDiv.innerHTML = '';
+                document.getElementById('search-input').value = '';
+            };
+        });
+
+        socket.on('user_not_found', () => {
+            document.getElementById('search-result').innerHTML = '<span style="color:red; font-size:12px;">Не знайдено</span>';
+        });
+
+        // Завантаження чатів
         function loadChats() {
             socket.emit('get_chats', currentUser.username);
         }
@@ -168,48 +322,53 @@
                 if (chat.username === currentUser.username) return;
                 const div = document.createElement('div');
                 div.className = 'chat-item';
-                div.innerHTML = `<img src="${chat.avatar}"><span>${chat.nickname} (${chat.username})</span>`;
+                div.innerHTML = `
+                    <img src="${chat.avatar}">
+                    <span>${chat.nickname} (${chat.username})</span>
+                    <span class="status-dot ${chat.online ? 'online' : ''}" id="status-${chat.username}"></span>
+                `;
                 div.onclick = () => openChat(chat);
                 chatsList.appendChild(div);
             });
         });
 
-        // Пошук користувача
-        const searchInput = document.getElementById('search-input');
-        const searchBtn = document.getElementById('search-btn');
-        const searchResult = document.getElementById('search-result');
-
-        searchBtn.addEventListener('click', () => {
-            const query = searchInput.value.trim();
-            if (query) socket.emit('search_user', query);
+        // Оновлення онлайн статусів у реальному часі
+        socket.on('status_update', (data) => {
+            const dot = document.getElementById(`status-${data.username}`);
+            if (dot) {
+                if (data.online) dot.classList.add('online');
+                else dot.classList.remove('online');
+            }
+            if (currentChatUser === data.username) {
+                const headerDot = document.getElementById('header-status-dot');
+                const statusText = document.getElementById('chat-with-status');
+                if (data.online) {
+                    headerDot.classList.add('online');
+                    statusText.textContent = 'В мережі';
+                } else {
+                    headerDot.classList.remove('online');
+                    statusText.textContent = 'Не в мережі';
+                }
+            }
         });
 
-        socket.on('user_found', (user) => {
-            searchResult.innerHTML = `
-                <div class="chat-item" style="background:#334155; margin-top:5px;">
-                    <img src="${user.avatar}" style="width:30px; height:30px; border-radius:50%;">
-                    <span>${user.nickname} (${user.username})</span>
-                </div>
-            `;
-            searchResult.querySelector('.chat-item').onclick = () => {
-                openChat(user);
-                searchResult.innerHTML = '';
-                searchInput.value = '';
-            };
-        });
-
-        socket.on('user_not_found', () => {
-            searchResult.innerHTML = '<span style="color:red; font-size:12px;">Користувача не знайдено</span>';
-        });
-
-        // Відкриття чату з переходом
         function openChat(user) {
             currentChatUser = user.username;
             document.getElementById('chat-header').classList.remove('hidden');
             document.getElementById('chat-input-area').classList.remove('hidden');
             document.getElementById('chat-with-title').textContent = user.nickname;
+            document.getElementById('chat-header-avatar').src = user.avatar || 'https://i.imgur.com/6VBx3io.png';
             
-            // Плавний перехід на мобільних
+            const headerDot = document.getElementById('header-status-dot');
+            const statusText = document.getElementById('chat-with-status');
+            if (user.online) {
+                headerDot.classList.add('online');
+                statusText.textContent = 'В мережі';
+            } else {
+                headerDot.classList.remove('online');
+                statusText.textContent = 'Не в мережі';
+            }
+
             if (window.innerWidth <= 768) {
                 document.getElementById('sidebar').classList.add('hidden-mobile');
             }
@@ -217,13 +376,11 @@
             socket.emit('get_messages', { user1: currentUser.username, user2: currentChatUser });
         }
 
-        // Кнопка назад (як у Telegram на мобільних)
         document.getElementById('back-btn').addEventListener('click', () => {
             document.getElementById('sidebar').classList.remove('hidden-mobile');
             loadChats();
         });
 
-        // Екранування тексту для безпеки коду
         function escapeHtml(text) {
             const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
             return text.replace(/[&<>"']/g, function(m) { return map[m]; });
@@ -234,59 +391,4 @@
         const messagesContainer = document.getElementById('messages-container');
 
         sendBtn.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-
-        function sendMessage() {
-            const text = messageInput.value.trim();
-            if (!text || !currentChatUser) return;
-
-            socket.emit('send_message', {
-                sender: currentUser.username,
-                recipient: currentChatUser,
-                text: text
-            });
-            messageInput.value = '';
-        }
-
-        // Завантаження історії повідомлень
-        socket.on('chat_history', (messages) => {
-            messagesContainer.innerHTML = '';
-            messages.forEach(msg => appendMessage(msg));
-        });
-
-        socket.on('new_message', (data) => {
-            if (data.sender === currentChatUser || data.recipient === currentChatUser) {
-                appendMessage(data);
-            }
-            loadChats();
-        });
-
-        function appendMessage(data) {
-            const isMe = data.sender === currentUser.username;
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${isMe ? 'me' : ''}`;
-            msgDiv.innerHTML = `<p>${escapeHtml(data.text)}</p><small style="font-size:10px; opacity:0.7; float:right; margin-left:10px; margin-top:4px;">${data.timestamp}</small>`;
-            messagesContainer.appendChild(msgDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        // Блокування та видалення чату
-        document.getElementById('block-btn').addEventListener('click', () => {
-            if (currentChatUser && confirm('Заблокувати та видалити чат для обох?')) {
-                socket.emit('block_user', { user1: currentUser.username, user2: currentChatUser });
-            }
-        });
-
-        socket.on('chat_blocked', () => {
-            alert('Чат було заблоковано та видалено.');
-            currentChatUser = null;
-            document.getElementById('chat-header').classList.add('hidden');
-            document.getElementById('chat-input-area').classList.add('hidden');
-            messagesContainer.innerHTML = '';
-            document.getElementById('sidebar').classList.remove('hidden-mobile');
-            loadChats();
-        });
-    </script>
-</body>
-                    </html>
-    
+        messageInput
