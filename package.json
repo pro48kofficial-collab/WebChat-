@@ -1,7 +1,7 @@
 {
   "name": "webchat",
   "version": "1.0.0",
-  "description": "Simple web chat with Socket.io and SQLite",
+  "description": "WebChat with Socket.io and SQLite",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
