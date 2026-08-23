@@ -1,98 +1,176 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Роздаємо файли прямо з кореневої папки
+app.use(express.json({ limit: '10mb' })); // Для прийому картинок (Base64)
 app.use(express.static(__dirname));
 
-// База даних у пам'яті
-const users = {};       // socket.id -> { username, nickname, avatar }
-const usernames = {};   // username -> socket.id
-const blocks = new Set(); // пари заблокованих ("user1:user2")
+// Ініціалізація бази даних SQLite
+const db = new sqlite3.Database('./chat.db', (err) => {
+    if (err) console.error('Помилка БД:', err.message);
+    else console.log('Підключено до бази даних SQLite.');
+});
+
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        nickname TEXT,
+        avatar TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        sender TEXT,
+        recipient TEXT,
+        text TEXT,
+        timestamp TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS blocks (
+        user1 TEXT,
+        user2 TEXT
+    )`);
+});
+
+const activeSockets = {}; // username -> socket.id
 
 io.on('connection', (socket) => {
     console.log(`Користувач підключився: ${socket.id}`);
 
-    // Реєстрація
+    // Реєстрація / Вхід
     socket.on('register', (data) => {
         const { username, nickname, avatar } = data;
-        if (usernames[username]) {
-            socket.emit('register_error', 'Цей юзернейм вже зайнятий!');
-            return;
-        }
-
-        users[socket.id] = { username, nickname, avatar: avatar || 'https://i.imgur.com/6VBx3io.png' };
-        usernames[username] = socket.id;
-        socket.emit('register_success', users[socket.id]);
+        db.get(`SELECT * FROM users WHERE username = ?`, [username], (err, row) => {
+            if (row) {
+                // Якщо користувач вже існує — оновлюємо дані і впускаємо
+                db.run(`UPDATE users SET nickname = ?, avatar = ? WHERE username = ?`, [nickname, avatar || 'https://i.imgur.com/6VBx3io.png', username], () => {
+                    activeSockets[username] = socket.id;
+                    socket.emit('register_success', { username, nickname, avatar: avatar || row.avatar });
+                });
+            } else {
+                // Створюємо нового
+                const defaultAvatar = avatar || 'https://i.imgur.com/6VBx3io.png';
+                db.run(`INSERT INTO users (username, nickname, avatar) VALUES (?, ?, ?)`, [username, nickname, defaultAvatar], (err) => {
+                    if (err) {
+                        socket.emit('register_error', 'Помилка реєстрації!');
+                        return;
+                    }
+                    activeSockets[username] = socket.id;
+                    socket.emit('register_success', { username, nickname, avatar: defaultAvatar });
+                });
+            }
+        });
     });
 
     // Пошук користувача
     socket.on('search_user', (searchName) => {
-        const targetSocketId = usernames[searchName];
-        if (targetSocketId && targetSocketId !== socket.id) {
-            socket.emit('user_found', users[targetSocketId]);
-        } else {
-            socket.emit('user_not_found');
-        }
+        db.get(`SELECT username, nickname, avatar FROM users WHERE username = ?`, [searchName], (err, user) => {
+            if (user) {
+                socket.emit('user_found', user);
+            } else {
+                socket.emit('user_not_found');
+            }
+        });
+    });
+
+    // Завантаження історії чатів (хто з ким спілкувався)
+    socket.on('get_chats', (username) => {
+        db.all(`
+            SELECT DISTINCT 
+                CASE WHEN sender = ? THEN recipient ELSE sender END as partner
+            FROM messages 
+            WHERE sender = ? OR recipient = ?
+        `, [username, username, username], (err, rows) => {
+            if (err) return;
+            const partners = rows.map(r => r.partner);
+            if (partners.length === 0) {
+                socket.emit('chats_list', []);
+                return;
+            }
+            
+            const placeholders = partners.map(() => '?').join(',');
+            db.all(`SELECT username, nickname, avatar FROM users WHERE username IN (${placeholders})`, partners, (err, usersList) => {
+                socket.emit('chats_list', usersList || []);
+            });
+        });
+    });
+
+    // Завантаження повідомлень конкретного чату
+    socket.on('get_messages', (data) => {
+        const { user1, user2 } = data;
+        db.all(`
+            SELECT * FROM messages 
+            WHERE (sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)
+            ORDER BY timestamp ASC
+        `, [user1, user2, user2, user1], (err, rows) => {
+            socket.emit('chat_history', rows || []);
+        });
     });
 
     // Надсилання повідомлення
     socket.on('send_message', (data) => {
-        const { recipientUsername, text } = data;
-        const sender = users[socket.id];
-        const recipientSocketId = usernames[recipientUsername];
-
-        if (!sender || !recipientSocketId) return;
-
+        const { sender, recipient, text } = data;
+        
         // Перевірка на блокування
-        const blockKey1 = `${sender.username}:${recipientUsername}`;
-        const blockKey2 = `${recipientUsername}:${sender.username}`;
-        if (blocks.has(blockKey1) || blocks.has(blockKey2)) return;
+        db.get(`SELECT * FROM blocks WHERE (user1 = ? AND user2 = ?) OR (user1 = ? AND user2 = ?)`, 
+        [sender, recipient, recipient, sender], (err, row) => {
+            if (row) {
+                socket.emit('error_msg', 'Цей чат заблоковано.');
+                return;
+            }
 
-        const messageData = {
-            id: Date.now().toString(),
-            sender: sender.username,
-            text,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
+            const msgData = {
+                id: Date.now().toString() + Math.random(),
+                sender,
+                recipient,
+                text,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
 
-        io.to(recipientSocketId).emit('new_message', messageData);
-        socket.emit('new_message', messageData);
+            db.run(`INSERT INTO messages (id, sender, recipient, text, timestamp) VALUES (?, ?, ?, ?, ?)`,
+                [msgData.id, msgData.sender, msgData.recipient, msgData.text, msgData.timestamp], () => {
+                    
+                    socket.emit('new_message', msgData);
+                    const recipientSocketId = activeSockets[recipient];
+                    if (recipientSocketId) {
+                        io.to(recipientSocketId).emit('new_message', msgData);
+                    }
+                });
+        });
     });
 
-    // Блокування (видалення чату для обох)
-    socket.on('block_user', (targetUsername) => {
-        const sender = users[socket.id];
-        const targetSocketId = usernames[targetUsername];
-        if (!sender) return;
-
-        blocks.add(`${sender.username}:${targetUsername}`);
-        blocks.add(`${targetUsername}:${sender.username}`);
-
-        socket.emit('chat_blocked');
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('chat_blocked');
-        }
+    // Блокування / Видалення чату
+    socket.on('block_user', (data) => {
+        const { user1, user2 } = data;
+        db.run(`INSERT INTO blocks (user1, user2) VALUES (?, ?)`, [user1, user2], () => {
+            db.run(`DELETE FROM messages WHERE (sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)`, 
+                [user1, user2, user2, user1], () => {
+                    socket.emit('chat_blocked');
+                    const targetSocketId = activeSockets[user2];
+                    if (targetSocketId) {
+                        io.to(targetSocketId).emit('chat_blocked');
+                    }
+                });
+        });
     });
 
-    // Відключення
     socket.on('disconnect', () => {
-        const user = users[socket.id];
-        if (user) {
-            delete usernames[user.username];
-            delete users[socket.id];
+        for (let [username, id] of Object.entries(activeSockets)) {
+            if (id === socket.id) {
+                delete activeSockets[username];
+                break;
+            }
         }
-        console.log(`Користувач вийшов: ${socket.id}`);
     });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Сервер запущено: http://localhost:${PORT}`);
+    console.log(`Сервер працює: http://localhost:${PORT}`);
 });
             
