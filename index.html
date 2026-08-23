@@ -158,12 +158,18 @@
 
         const regBtn = document.getElementById('reg-btn');
 
-        // Активуємо кнопку тільки коли з'єднання з сервером встановлено
+        // Таймер-захист від зависання під час «сну» на Render
+        setTimeout(() => {
+            if (regBtn.disabled) {
+                regBtn.disabled = false;
+                regBtn.textContent = 'Увійти в чат';
+            }
+        }, 2500);
+
         socket.on('connect', () => {
             regBtn.disabled = false;
             regBtn.textContent = 'Увійти в чат';
             
-            // Автоматичний вхід, якщо є збережена сесія
             const savedUsername = localStorage.getItem('webchat_username');
             if (savedUsername) {
                 socket.emit('register', { 
@@ -176,17 +182,18 @@
 
         socket.on('disconnect', () => {
             regBtn.disabled = true;
-            regBtn.textContent = 'З'єднанні втрачено...';
+            regBtn.textContent = "З'єднання втрачено...";
         });
 
+        // Гарантоване стиснення фото до розмірів 150х150 пікселів у JPEG
         function compressImage(file, callback) {
             const reader = new FileReader();
             reader.onload = (e) => {
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    const MAX_WIDTH = 200;
-                    const MAX_HEIGHT = 200;
+                    const MAX_WIDTH = 150;
+                    const MAX_HEIGHT = 150;
                     let width = img.width;
                     let height = img.height;
 
@@ -200,7 +207,7 @@
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-                    callback(canvas.toDataURL('image/jpeg', 0.8));
+                    callback(canvas.toDataURL('image/jpeg', 0.7));
                 };
                 img.src = e.target.result;
             };
@@ -213,6 +220,16 @@
                 compressImage(file, (compressedData) => {
                     base64Avatar = compressedData;
                     document.getElementById('preview-avatar').src = base64Avatar;
+                });
+            }
+        });
+
+        document.getElementById('edit-avatar-file').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                compressImage(file, (compressedData) => {
+                    editBase64Avatar = compressedData;
+                    document.getElementById('edit-preview-avatar').src = editBase64Avatar;
                 });
             }
         });
@@ -260,16 +277,6 @@
 
         document.getElementById('cancel-profile-btn').addEventListener('click', () => {
             document.getElementById('profile-screen').classList.add('hidden');
-        });
-
-        document.getElementById('edit-avatar-file').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                compressImage(file, (compressedData) => {
-                    editBase64Avatar = compressedData;
-                    document.getElementById('edit-preview-avatar').src = editBase64Avatar;
-                });
-            }
         });
 
         document.getElementById('save-profile-btn').addEventListener('click', () => {
@@ -388,8 +395,4 @@
             document.getElementById('chat-input-area').classList.remove('hidden');
             document.getElementById('chat-with-title').textContent = user.nickname;
             document.getElementById('chat-header-avatar').src = user.avatar || 'https://i.imgur.com/6VBx3io.png';
-            
-            const headerDot = document.getElementById('header-status-dot');
-            const statusText = document.getElementById('chat-with-status');
-            if (user.online) {
        
