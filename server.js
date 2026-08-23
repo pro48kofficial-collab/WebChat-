@@ -6,7 +6,7 @@ const sqlite3 = require('sqlite3').verbose();
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    maxHttpBufferSize: 1e7
+    maxHttpBufferSize: 1e7 // 10MB limit
 });
 
 app.use(express.json({ limit: '15mb' }));
@@ -216,6 +216,6 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Сервер працює: http://localhost:${PORT}`);
+    console.log(`Сервер працює на порту ${PORT}`);
 });
-        
+                                                                                        
