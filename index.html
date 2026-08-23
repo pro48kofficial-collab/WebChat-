@@ -6,35 +6,54 @@
     <title>WebChat</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-        body { background: #0f172a; color: #f8fafc; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        .screen { width: 90vw; height: 90vh; background: #1e293b; border-radius: 12px; display: flex; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        body { background: #0f172a; color: #f8fafc; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        .screen { width: 95vw; height: 95vh; background: #1e293b; border-radius: 12px; display: flex; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
         .hidden { display: none !important; }
 
         /* Auth */
         #auth-screen { justify-content: center; align-items: center; }
-        .card { background: #334155; padding: 30px; border-radius: 8px; width: 350px; display: flex; flex-direction: column; gap: 15px; }
-        .card input, .card button { padding: 10px; border-radius: 6px; border: none; outline: none; }
+        .card { background: #334155; padding: 30px; border-radius: 12px; width: 350px; display: flex; flex-direction: column; gap: 15px; align-items: center; }
+        .card input, .card button { width: 100%; padding: 12px; border-radius: 8px; border: none; outline: none; }
         .card input { background: #1e293b; color: white; }
         .card button { background: #3b82f6; color: white; font-weight: bold; cursor: pointer; }
-        .error { color: #ef4444; font-size: 14px; }
+        .avatar-picker { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; }
+        .avatar-picker img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #3b82f6; }
+        .error { color: #ef4444; font-size: 14px; text-align: center; }
 
-        /* Chat Layout */
-        .sidebar { width: 300px; background: #0f172a; border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 15px; gap: 15px; }
-        .profile-info { display: flex; align-items: center; gap: 10px; }
-        .profile-info img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+        /* Telegram-style Layout */
+        .sidebar { width: 350px; background: #0f172a; border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 15px; gap: 15px; transition: 0.3s; }
+        .profile-info { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid #334155; }
+        .profile-info img { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; }
         .search-box { display: flex; gap: 5px; }
-        .search-box input { flex: 1; padding: 8px; border-radius: 4px; border: none; background: #1e293b; color: white; }
-        .search-box button { background: #3b82f6; border: none; padding: 8px 12px; border-radius: 4px; color: white; cursor: pointer; }
+        .search-box input { flex: 1; padding: 10px; border-radius: 6px; border: none; background: #1e293b; color: white; }
+        .search-box button { background: #3b82f6; border: none; padding: 10px 15px; border-radius: 6px; color: white; cursor: pointer; }
 
-        .chat-area { flex: 1; display: flex; flex-direction: column; }
+        #chats-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+        .chat-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; cursor: pointer; background: #1e293b; transition: 0.2s; }
+        .chat-item:hover { background: #334155; }
+        .chat-item img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: #1e293b; transition: transform 0.3s ease; }
         #chat-header { padding: 15px; background: #334155; display: flex; justify-content: space-between; align-items: center; }
-        .danger-btn { background: #ef4444; border: none; padding: 6px 12px; color: white; border-radius: 4px; cursor: pointer; }
+        .back-btn { display: none; background: none; border: none; color: white; font-size: 18px; cursor: pointer; }
+        .danger-btn { background: #ef4444; border: none; padding: 6px 12px; color: white; border-radius: 6px; cursor: pointer; }
+        
         #messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-        .message { background: #334155; padding: 10px; border-radius: 6px; max-width: 60%; word-break: break-word; }
+        .message { background: #334155; padding: 10px 14px; border-radius: 10px; max-width: 65%; word-break: break-word; }
         .message.me { background: #2563eb; align-self: flex-end; }
+        
         #chat-input-area { padding: 15px; background: #334155; display: flex; gap: 10px; align-items: center; }
-        #chat-input-area input[type="text"] { flex: 1; padding: 10px; border-radius: 6px; border: none; background: #1e293b; color: white; }
-        #chat-input-area button { background: #3b82f6; border: none; padding: 10px 15px; border-radius: 6px; color: white; cursor: pointer; }
+        #chat-input-area input[type="text"] { flex: 1; padding: 12px; border-radius: 8px; border: none; background: #1e293b; color: white; }
+        #chat-input-area button { background: #3b82f6; border: none; padding: 12px 18px; border-radius: 8px; color: white; cursor: pointer; }
+
+        /* Responsive Telegram style for mobile */
+        @media(max-width: 768px) {
+            .screen { width: 100vw; height: 100vh; border-radius: 0; }
+            .sidebar { width: 100%; position: absolute; height: 100%; z-index: 2; }
+            .sidebar.hidden-mobile { transform: translateX(-100%); }
+            .chat-area { width: 100%; position: absolute; height: 100%; z-index: 1; }
+            .back-btn { display: block; }
+        }
     </style>
 </head>
 <body>
@@ -42,9 +61,13 @@
     <div id="auth-screen" class="screen">
         <div class="card">
             <h2>Реєстрація у WebChat</h2>
-            <input type="text" id="reg-username" placeholder="Юзернейм (унікальний, напр. @pro)">
-            <input type="text" id="reg-nickname" placeholder="Нікнейм (ім'я)">
-            <input type="text" id="reg-avatar" placeholder="URL аватарки (необов'язково)">
+            <label class="avatar-picker">
+                <img id="preview-avatar" src="https://i.imgur.com/6VBx3io.png" alt="Аватар">
+                <span style="font-size: 12px; color: #94a3b8;">Натисніть, щоб обрати фото</span>
+                <input type="file" id="reg-avatar-file" accept="image/*" style="display: none;">
+            </label>
+            <input type="text" id="reg-username" placeholder="Юзернейм (напр. @pro)">
+            <input type="text" id="reg-nickname" placeholder="Ваше ім'я (Нікнейм)">
             <button id="reg-btn">Увійти в чат</button>
             <p id="auth-error" class="error"></p>
         </div>
@@ -52,29 +75,34 @@
 
     <!-- Головний екран чату -->
     <div id="chat-screen" class="screen hidden">
-        <div class="sidebar">
+        <div id="sidebar" class="sidebar">
             <div class="profile-info">
                 <img id="my-avatar" src="" alt="Avatar">
                 <div>
                     <h4 id="my-nickname"></h4>
-                    <span id="my-username"></span>
+                    <span id="my-username" style="font-size: 13px; color: #94a3b8;"></span>
                 </div>
             </div>
             <div class="search-box">
-                <input type="text" id="search-input" placeholder="Введіть юз для пошуку...">
+                <input type="text" id="search-input" placeholder="Пошук за юзом (@...)">
                 <button id="search-btn">🔍</button>
             </div>
-            <div id="search-result"></div>
+            <div id="search-result" style="margin-bottom: 5px;"></div>
+            <h5 style="color: #94a3b8; font-size: 12px; margin-top: 5px;">ВАШІ ЧАТИ</h5>
+            <div id="chats-list"></div>
         </div>
 
-        <div class="chat-area">
+        <div id="chat-area" class="chat-area">
             <div id="chat-header" class="hidden">
-                <span id="chat-with-title">Оберіть чат</span>
-                <button id="block-btn" class="danger-btn">Заблокувати / Видалити чат</button>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button id="back-btn" class="back-btn">⬅</button>
+                    <span id="chat-with-title" style="font-weight: bold;">Оберіть чат</span>
+                </div>
+                <button id="block-btn" class="danger-btn">Заблокувати</button>
             </div>
             <div id="messages-container"></div>
             <div id="chat-input-area" class="hidden">
-                <input type="text" id="message-input" placeholder="Напишіть повідомлення (код захищено)...">
+                <input type="text" id="message-input" placeholder="Напишіть повідомлення...">
                 <button id="send-btn">➤</button>
             </div>
         </div>
@@ -85,6 +113,20 @@
         const socket = io();
         let currentUser = null;
         let currentChatUser = null;
+        let base64Avatar = 'https://i.imgur.com/6VBx3io.png';
+
+        // Вибір аватарки з галереї пристрою
+        document.getElementById('reg-avatar-file').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    base64Avatar = event.target.result;
+                    document.getElementById('preview-avatar').src = base64Avatar;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
 
         const authScreen = document.getElementById('auth-screen');
         const chatScreen = document.getElementById('chat-screen');
@@ -94,13 +136,12 @@
         regBtn.addEventListener('click', () => {
             const username = document.getElementById('reg-username').value.trim();
             const nickname = document.getElementById('reg-nickname').value.trim();
-            const avatar = document.getElementById('reg-avatar').value.trim();
 
             if (!username || !nickname) {
                 authError.textContent = 'Заповніть юзернейм та нікнейм!';
                 return;
             }
-            socket.emit('register', { username, nickname, avatar });
+            socket.emit('register', { username, nickname, avatar: base64Avatar });
         });
 
         socket.on('register_error', (msg) => { authError.textContent = msg; });
@@ -112,8 +153,28 @@
 
             authScreen.classList.add('hidden');
             chatScreen.classList.remove('hidden');
+            loadChats();
         });
 
+        // Завантаження списку попередніх чатів
+        function loadChats() {
+            socket.emit('get_chats', currentUser.username);
+        }
+
+        socket.on('chats_list', (chats) => {
+            const chatsList = document.getElementById('chats-list');
+            chatsList.innerHTML = '';
+            chats.forEach(chat => {
+                if (chat.username === currentUser.username) return;
+                const div = document.createElement('div');
+                div.className = 'chat-item';
+                div.innerHTML = `<img src="${chat.avatar}"><span>${chat.nickname} (${chat.username})</span>`;
+                div.onclick = () => openChat(chat);
+                chatsList.appendChild(div);
+            });
+        });
+
+        // Пошук користувача
         const searchInput = document.getElementById('search-input');
         const searchBtn = document.getElementById('search-btn');
         const searchResult = document.getElementById('search-result');
@@ -125,17 +186,15 @@
 
         socket.on('user_found', (user) => {
             searchResult.innerHTML = `
-                <div class="user-card" style="display:flex; align-items:center; gap:10px; background:#334155; padding:8px; border-radius:4px; cursor:pointer;">
+                <div class="chat-item" style="background:#334155; margin-top:5px;">
                     <img src="${user.avatar}" style="width:30px; height:30px; border-radius:50%;">
                     <span>${user.nickname} (${user.username})</span>
                 </div>
             `;
-            searchResult.querySelector('.user-card').onclick = () => {
-                currentChatUser = user.username;
-                document.getElementById('chat-header').classList.remove('hidden');
-                document.getElementById('chat-input-area').classList.remove('hidden');
-                document.getElementById('chat-with-title').textContent = `Чат з ${user.nickname}`;
-                document.getElementById('messages-container').innerHTML = '';
+            searchResult.querySelector('.chat-item').onclick = () => {
+                openChat(user);
+                searchResult.innerHTML = '';
+                searchInput.value = '';
             };
         });
 
@@ -143,7 +202,28 @@
             searchResult.innerHTML = '<span style="color:red; font-size:12px;">Користувача не знайдено</span>';
         });
 
-        // Захист від зламу кодом (екранування HTML-тегів у повідомленнях)
+        // Відкриття чату з переходом
+        function openChat(user) {
+            currentChatUser = user.username;
+            document.getElementById('chat-header').classList.remove('hidden');
+            document.getElementById('chat-input-area').classList.remove('hidden');
+            document.getElementById('chat-with-title').textContent = user.nickname;
+            
+            // Плавний перехід на мобільних
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.add('hidden-mobile');
+            }
+
+            socket.emit('get_messages', { user1: currentUser.username, user2: currentChatUser });
+        }
+
+        // Кнопка назад (як у Telegram на мобільних)
+        document.getElementById('back-btn').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.remove('hidden-mobile');
+            loadChats();
+        });
+
+        // Екранування тексту для безпеки коду
         function escapeHtml(text) {
             const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
             return text.replace(/[&<>"']/g, function(m) { return map[m]; });
@@ -153,39 +233,60 @@
         const sendBtn = document.getElementById('send-btn');
         const messagesContainer = document.getElementById('messages-container');
 
-        sendBtn.addEventListener('click', () => {
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+        function sendMessage() {
             const text = messageInput.value.trim();
             if (!text || !currentChatUser) return;
 
-            socket.emit('send_message', { recipientUsername: currentChatUser, text });
+            socket.emit('send_message', {
+                sender: currentUser.username,
+                recipient: currentChatUser,
+                text: text
+            });
             messageInput.value = '';
+        }
+
+        // Завантаження історії повідомлень
+        socket.on('chat_history', (messages) => {
+            messagesContainer.innerHTML = '';
+            messages.forEach(msg => appendMessage(msg));
         });
 
         socket.on('new_message', (data) => {
+            if (data.sender === currentChatUser || data.recipient === currentChatUser) {
+                appendMessage(data);
+            }
+            loadChats();
+        });
+
+        function appendMessage(data) {
             const isMe = data.sender === currentUser.username;
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${isMe ? 'me' : ''}`;
-            msgDiv.innerHTML = `<p>${escapeHtml(data.text)}</p><small style="font-size:10px; opacity:0.7;">${data.timestamp}</small>`;
-            
+            msgDiv.innerHTML = `<p>${escapeHtml(data.text)}</p><small style="font-size:10px; opacity:0.7; float:right; margin-left:10px; margin-top:4px;">${data.timestamp}</small>`;
             messagesContainer.appendChild(msgDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        });
+        }
 
+        // Блокування та видалення чату
         document.getElementById('block-btn').addEventListener('click', () => {
-            if (currentChatUser && confirm('Заблокувати користувача та видалити чат?')) {
-                socket.emit('block_user', currentChatUser);
+            if (currentChatUser && confirm('Заблокувати та видалити чат для обох?')) {
+                socket.emit('block_user', { user1: currentUser.username, user2: currentChatUser });
             }
         });
 
         socket.on('chat_blocked', () => {
-            alert('Чат заблоковано та видалено.');
+            alert('Чат було заблоковано та видалено.');
             currentChatUser = null;
             document.getElementById('chat-header').classList.add('hidden');
             document.getElementById('chat-input-area').classList.add('hidden');
-            document.getElementById('messages-container').innerHTML = '';
-            document.getElementById('chat-with-title').textContent = 'Оберіть чат';
+            messagesContainer.innerHTML = '';
+            document.getElementById('sidebar').classList.remove('hidden-mobile');
+            loadChats();
         });
     </script>
 </body>
-    </html>
-                
+                    </html>
+    
