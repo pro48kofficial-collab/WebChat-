@@ -395,4 +395,105 @@
             document.getElementById('chat-input-area').classList.remove('hidden');
             document.getElementById('chat-with-title').textContent = user.nickname;
             document.getElementById('chat-header-avatar').src = user.avatar || 'https://i.imgur.com/6VBx3io.png';
-       
+            
+            const headerDot = document.getElementById('header-status-dot');
+            const statusText = document.getElementById('chat-with-status');
+            if (user.online) {
+                headerDot.classList.add('online');
+                statusText.textContent = 'В мережі';
+            } else {
+                headerDot.classList.remove('online');
+                statusText.textContent = 'Не в мережі';
+            }
+
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.add('hidden-mobile');
+            }
+
+            socket.emit('get_messages', { user1: currentUser.username, user2: currentChatUser });
+        }
+
+        document.getElementById('back-btn').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.remove('hidden-mobile');
+            loadChats();
+        });
+
+        function escapeHtml(text) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const messagesContainer = document.getElementById('messages-container');
+
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if ((!text && !selectedFile) || !currentChatUser) return;
+
+            socket.emit('send_message', {
+                sender: currentUser.username,
+                recipient: currentChatUser,
+                text: text,
+                fileData: selectedFile ? selectedFile.data : null,
+                fileName: selectedFile ? selectedFile.name : null
+            });
+
+            messageInput.value = '';
+            messageInput.placeholder = 'Напишіть повідомлення...';
+            selectedFile = null;
+        }
+
+        socket.on('chat_history', (messages) => {
+            messagesContainer.innerHTML = '';
+            messages.forEach(msg => appendMessage(msg));
+        });
+
+        socket.on('new_message', (data) => {
+            if (data.sender === currentChatUser || data.recipient === currentChatUser) {
+                appendMessage(data);
+            }
+            loadChats();
+        });
+
+        function appendMessage(data) {
+            const isMe = data.sender === currentUser.username;
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${isMe ? 'me' : ''}`;
+            
+            let content = `<p>${escapeHtml(data.text)}</p>`;
+            if (data.fileData) {
+                if (data.fileData.startsWith('data:image/')) {
+                    content += `<img src="${data.fileData}" alt="Фото">`;
+                } else {
+                    content += `<a href="${data.fileData}" download="${data.fileName}">📄 ${escapeHtml(data.fileName)}</a>`;
+                }
+            }
+            content += `<small style="font-size:10px; opacity:0.7; float:right; margin-left:10px; margin-top:4px;">${data.timestamp}</small>`;
+            
+            msgDiv.innerHTML = content;
+            messagesContainer.appendChild(msgDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        document.getElementById('block-btn').addEventListener('click', () => {
+            if (currentChatUser && confirm('Заблокувати та видалити чат для обох?')) {
+                socket.emit('block_user', { user1: currentUser.username, user2: currentChatUser });
+            }
+        });
+
+        socket.on('chat_blocked', () => {
+            alert('Чат заблоковано та видалено.');
+            currentChatUser = null;
+            document.getElementById('chat-header').classList.add('hidden');
+            document.getElementById('chat-input-area').classList.add('hidden');
+            messagesContainer.innerHTML = '';
+            document.getElementById('sidebar').classList.remove('hidden-mobile');
+            loadChats();
+        });
+    </script>
+</body>
+</html>
