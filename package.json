@@ -1,5 +1,5 @@
 {
-  "name": "WebChat",
+  "name": "webchat-app",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
@@ -7,8 +7,6 @@
   },
   "dependencies": {
     "express": "^4.19.2",
-    "multer": "^1.4.5-lts.1",
-    "socket.io": "^4.7.5",
-    "sqlite3": "^5.1.7"
+    "socket.io": "^4.7.5"
   }
 }
