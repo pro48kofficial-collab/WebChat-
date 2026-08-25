@@ -31,7 +31,9 @@ db.serialize(() => {
         text TEXT,
         fileData TEXT,
         fileName TEXT,
-        timestamp TEXT
+        timestamp TEXT,
+        reactions TEXT,
+        edited INTEGER DEFAULT 0
     )`);
 
     db.run(`CREATE TABLE IF NOT EXISTS blocks (
@@ -129,7 +131,7 @@ io.on('connection', (socket) => {
             WHERE sender = ? OR recipient = ?
         `, [username, username, username], (err, rows) => {
             if (err) return;
-            const partners = rows.map(r => r.partner);
+            const partners = (rows || []).map(r => r.partner);
             if (partners.length === 0) {
                 socket.emit('chats_list', []);
                 return;
@@ -153,7 +155,11 @@ io.on('connection', (socket) => {
             WHERE (sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)
             ORDER BY timestamp ASC
         `, [user1, user2, user2, user1], (err, rows) => {
-            socket.emit('chat_history', rows || []);
+            const formatted = (rows || []).map(r => ({
+                ...r,
+                reactions: r.reactions ? JSON.parse(r.reactions) : {}
+            }));
+            socket.emit('chat_history', formatted);
         });
     });
 
@@ -174,11 +180,13 @@ io.on('connection', (socket) => {
                 text: text || '',
                 fileData: fileData || null,
                 fileName: fileName || null,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                reactions: {},
+                edited: 0
             };
 
-            db.run(`INSERT INTO messages (id, sender, recipient, text, fileData, fileName, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [msgData.id, msgData.sender, msgData.recipient, msgData.text, msgData.fileData, msgData.fileName, msgData.timestamp], () => {
+            db.run(`INSERT INTO messages (id, sender, recipient, text, fileData, fileName, timestamp, reactions, edited) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [msgData.id, msgData.sender, msgData.recipient, msgData.text, msgData.fileData, msgData.fileName, msgData.timestamp, JSON.stringify(msgData.reactions), 0], () => {
                     
                     socket.emit('new_message', msgData);
                     const recipientSocketId = activeUsers[recipient];
@@ -189,17 +197,57 @@ io.on('connection', (socket) => {
         });
     });
 
+    socket.on('edit_message', (data) => {
+        const { id, newText, user } = data;
+        db.run(`UPDATE messages SET text = ?, edited = 1 WHERE id = ? AND sender = ?`, [newText, id, user], function(err) {
+            if (this.changes > 0) {
+                db.get(`SELECT * FROM messages WHERE id = ?`, [id], (err, row) => {
+                    if (row) {
+                        const updatedMsg = { ...row, reactions: row.reactions ? JSON.parse(row.reactions) : {} };
+                        io.emit('message_updated', updatedMsg);
+                    }
+                });
+            }
+        });
+    });
+
+    socket.on('delete_message', (data) => {
+        const { id, user } = data;
+        db.run(`DELETE FROM messages WHERE id = ? AND sender = ?`, [id, user], function(err) {
+            if (this.changes > 0) {
+                io.emit('message_deleted', { id });
+            }
+        });
+    });
+
+    socket.on('add_reaction', (data) => {
+        const { id, emoji, user } = data;
+        db.get(`SELECT * FROM messages WHERE id = ?`, [id], (err, row) => {
+            if (!row) return;
+            let reactions = row.reactions ? JSON.parse(row.reactions) : {};
+            
+            // Якщо користувач вже ставив цю ж реакцію — знімаємо, інакше ставимо/переключаємо
+            if (reactions[user] === emoji) {
+                delete reactions[user];
+            } else {
+                reactions[user] = emoji;
+            }
+
+            db.run(`UPDATE messages SET reactions = ? WHERE id = ?`, [JSON.stringify(reactions), id], () => {
+                const updatedMsg = { ...row, reactions };
+                io.emit('message_updated', updatedMsg);
+            });
+        });
+    });
+
     socket.on('block_user', (data) => {
         const { user1, user2 } = data;
         db.run(`INSERT INTO blocks (user1, user2) VALUES (?, ?)`, [user1, user2], () => {
-            db.run(`DELETE FROM messages WHERE (sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)`, 
-                [user1, user2, user2, user1], () => {
-                    socket.emit('chat_blocked');
-                    const targetSocketId = activeUsers[user2];
-                    if (targetSocketId) {
-                        io.to(targetSocketId).emit('chat_blocked');
-                    }
-                });
+            socket.emit('chat_blocked');
+            const targetSocketId = activeUsers[user2];
+            if (targetSocketId) {
+                io.to(targetSocketId).emit('chat_blocked');
+            }
         });
     });
 
@@ -218,4 +266,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Сервер працює на порту ${PORT}`);
 });
-                                                                                        
+                        
