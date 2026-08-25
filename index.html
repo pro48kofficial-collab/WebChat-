@@ -44,11 +44,17 @@
         .back-btn { display: none; background: none; border: none; color: white; font-size: 18px; cursor: pointer; }
         .danger-btn { background: #ef4444; border: none; padding: 6px 12px; color: white; border-radius: 6px; cursor: pointer; }
         
-        #messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-        .message { background: #334155; padding: 10px 14px; border-radius: 10px; max-width: 65%; word-break: break-word; }
+        #messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .message { background: #334155; padding: 10px 14px; border-radius: 10px; max-width: 65%; word-break: break-word; position: relative; }
         .message.me { background: #2563eb; align-self: flex-end; }
         .message img { max-width: 200px; border-radius: 6px; margin-top: 5px; display: block; }
         .message a { color: #93c5fd; display: block; margin-top: 5px; font-size: 13px; }
+        
+        /* Меню дій та реакції */
+        .msg-actions { display: none; position: absolute; right: 10px; top: 5px; background: rgba(0,0,0,0.4); border-radius: 4px; padding: 2px 5px; font-size: 12px; cursor: pointer; }
+        .message:hover .msg-actions { display: inline-block; }
+        .reactions-bar { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+        .reaction-badge { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 10px; font-size: 12px; cursor: pointer; }
         
         #chat-input-area { padding: 15px; background: #334155; display: flex; gap: 10px; align-items: center; }
         #chat-input-area input[type="text"] { flex: 1; padding: 12px; border-radius: 8px; border: none; background: #1e293b; color: white; }
@@ -155,10 +161,10 @@
         let base64Avatar = 'https://i.imgur.com/6VBx3io.png';
         let editBase64Avatar = '';
         let selectedFile = null;
+        let editingMessageId = null;
 
         const regBtn = document.getElementById('reg-btn');
 
-        // Таймер-захист від зависання під час «сну» на Render
         setTimeout(() => {
             if (regBtn.disabled) {
                 regBtn.disabled = false;
@@ -185,7 +191,6 @@
             regBtn.textContent = "З'єднання втрачено...";
         });
 
-        // Гарантоване стиснення фото до розмірів 150х150 пікселів у JPEG
         function compressImage(file, callback) {
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -393,7 +398,7 @@
             currentChatUser = user.username;
             document.getElementById('chat-header').classList.remove('hidden');
             document.getElementById('chat-input-area').classList.remove('hidden');
-            document.getElementById('chat-with-title').textContent = user.nickname;
+            document.getElementById('chat-with-title').textContent = user.nickname || user.username;
             document.getElementById('chat-header-avatar').src = user.avatar || 'https://i.imgur.com/6VBx3io.png';
             
             const headerDot = document.getElementById('header-status-dot');
@@ -434,6 +439,13 @@
             const text = messageInput.value.trim();
             if ((!text && !selectedFile) || !currentChatUser) return;
 
+            if (editingMessageId) {
+                socket.emit('edit_message', { id: editingMessageId, newText: text, user: currentUser.username });
+                editingMessageId = null;
+                messageInput.value = '';
+                return;
+            }
+
             socket.emit('send_message', {
                 sender: currentUser.username,
                 recipient: currentChatUser,
@@ -459,12 +471,42 @@
             loadChats();
         });
 
+        socket.on('message_updated', (data) => {
+            const el = document.getElementById(`msg-${data.id}`);
+            if (el) {
+                const textEl = el.querySelector('.msg-text');
+                if (textEl) textEl.textContent = data.text + (data.edited ? ' (ред.)' : '');
+                
+                // Оновлюємо блок реакцій
+                let reactionsContainer = el.querySelector('.reactions-bar');
+                if (!reactionsContainer) {
+                    reactionsContainer = document.createElement('div');
+                    reactionsContainer.className = 'reactions-bar';
+                    el.appendChild(reactionsContainer);
+                }
+                reactionsContainer.innerHTML = '';
+                for (let [u, emoji] of Object.entries(data.reactions || {})) {
+                    const badge = document.createElement('span');
+                    badge.className = 'reaction-badge';
+                    badge.textContent = emoji;
+                    reactionsContainer.appendChild(badge);
+                }
+            }
+        });
+
+        socket.on('message_deleted', (data) => {
+            const el = document.getElementById(`msg-${data.id}`);
+            if (el) el.remove();
+        });
+
         function appendMessage(data) {
             const isMe = data.sender === currentUser.username;
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${isMe ? 'me' : ''}`;
+            msgDiv.id = `msg-${data.id}`;
             
-            let content = `<p>${escapeHtml(data.text)}</p>`;
+            let content = `<div class="msg-text">${escapeHtml(data.text)}${data.edited ? ' <span style="font-size:10px; opacity:0.6;">(ред.)</span>' : ''}</div>`;
+            
             if (data.fileData) {
                 if (data.fileData.startsWith('data:image/')) {
                     content += `<img src="${data.fileData}" alt="Фото">`;
@@ -472,21 +514,61 @@
                     content += `<a href="${data.fileData}" download="${data.fileName}">📄 ${escapeHtml(data.fileName)}</a>`;
                 }
             }
-            content += `<small style="font-size:10px; opacity:0.7; float:right; margin-left:10px; margin-top:4px;">${data.timestamp}</small>`;
+
+            // Блок реакцій, якщо вони є
+            content += `<div class="reactions-bar">`;
+            if (data.reactions) {
+                for (let [u, emoji] of Object.entries(data.reactions)) {
+                    content += `<span class="reaction-badge">${emoji}</span>`;
+                }
+            }
+            content += `</div>`;
+
+            content += `<div style="display:flex; justify-content:flex-end; align-items:center; gap:5px; margin-top:4px;">`;
+            content += `<span style="font-size:10px; opacity:0.7;">${data.timestamp}</span>`;
+            content += `</div>`;
+
+            // Кнопки дій (редагувати, видалити, реакції) доступні при наведенні
+            content += `<div class="msg-actions">
+                <span onclick="addReaction('${data.id}', '❤️')">❤️</span>
+                <span onclick="addReaction('${data.id}', '👍')">👍</span>
+                <span onclick="addReaction('${data.id}', '😂')">😂</span>`;
             
+            if (isMe) {
+                content += ` <span onclick="editMsg('${data.id}', \`${escapeHtml(data.text)}\`)">✏️</span>`;
+                content += ` <span onclick="deleteMsg('${data.id}')">🗑️</span>`;
+            }
+            content += `</div>`;
+
             msgDiv.innerHTML = content;
             messagesContainer.appendChild(msgDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
+        window.addReaction = (id, emoji) => {
+            socket.emit('add_reaction', { id, emoji, user: currentUser.username });
+        };
+
+        window.editMsg = (id, currentText) => {
+            editingMessageId = id;
+            messageInput.value = currentText;
+            messageInput.focus();
+        };
+
+        window.deleteMsg = (id) => {
+            if (confirm('Видалити повідомлення?')) {
+                socket.emit('delete_message', { id, user: currentUser.username });
+            }
+        };
+
         document.getElementById('block-btn').addEventListener('click', () => {
-            if (currentChatUser && confirm('Заблокувати та видалити чат для обох?')) {
+            if (currentChatUser && confirm('Заблокувати чат?')) {
                 socket.emit('block_user', { user1: currentUser.username, user2: currentChatUser });
             }
         });
 
         socket.on('chat_blocked', () => {
-            alert('Чат заблоковано та видалено.');
+            alert('Чат було заблоковано.');
             currentChatUser = null;
             document.getElementById('chat-header').classList.add('hidden');
             document.getElementById('chat-input-area').classList.add('hidden');
