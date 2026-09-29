@@ -212,7 +212,8 @@ io.on("connection", socket => {
       const u=cleanUser(d.username), r=await pool.query(`SELECT username,nickname,avatar,description,crystals,frame,badge FROM users WHERE username=$1`,[u]);
       if(!r.rowCount) return socket.emit("user_not_found");
       const c=await pool.query(`SELECT c.* FROM chats c JOIN profile_channels p ON p.chat_id=c.id WHERE p.username=$1`,[u]);
-      socket.emit("profile_data",{...r.rows[0],online:!!activeUsers.get(u)?.size,channels:c.rows});
+      const owned=await pool.query(`SELECT * FROM chats WHERE owner=$1 AND kind='channel' ORDER BY created_at DESC`,[u]);
+      socket.emit("profile_data",{...r.rows[0],online:!!activeUsers.get(u)?.size,channels:c.rows,ownedChannels:owned.rows});
     } catch(e){}
   });
 
@@ -228,8 +229,16 @@ io.on("connection", socket => {
 
   socket.on("get_chats", async () => {
     const u=requireUser(socket); if(!u)return;
-    const r=await pool.query(`SELECT c.*,cm.role FROM chats c JOIN chat_members cm ON cm.chat_id=c.id WHERE cm.username=$1 ORDER BY c.created_at DESC`,[u]);
-    socket.emit("chats_list",r.rows);
+    const rooms=await pool.query(`SELECT c.*,cm.role FROM chats c JOIN chat_members cm ON cm.chat_id=c.id WHERE cm.username=$1 ORDER BY c.created_at DESC`,[u]);
+    const dm=await pool.query(`SELECT DISTINCT ON (partner) partner, created_at FROM (SELECT CASE WHEN sender=$1 THEN recipient ELSE sender END AS partner, created_at FROM direct_messages WHERE sender=$1 OR recipient=$1) x ORDER BY partner, created_at DESC`,[u]);
+    const partners=dm.rows.map(x=>x.partner);
+    let direct=[];
+    if(partners.length){
+      const r=await pool.query(`SELECT username,nickname,avatar,description FROM users WHERE username=ANY($1::text[])`,[partners]);
+      const by=new Map(r.rows.map(x=>[x.username,x]));
+      direct=dm.rows.map(x=>({...(by.get(x.partner)||{username:x.partner,nickname:x.partner,avatar:null}),kind:'dm',name:by.get(x.partner)?.nickname||x.partner,online:!!activeUsers.get(x.partner)?.size,last_at:x.created_at}));
+    }
+    socket.emit("chats_list",[...direct,...rooms.rows]);
   });
 
   socket.on("create_chat", async d => {
@@ -336,6 +345,22 @@ io.on("connection", socket => {
     socket.emit("new_direct_message",msg); broadcastUser(to,"new_direct_message",msg);
   });
 
+  socket.on("delete_direct_chat", async d => {
+    const u=requireUser(socket); if(!u)return;
+    const to=cleanUser(d.username);
+    await pool.query(`DELETE FROM direct_messages WHERE (sender=$1 AND recipient=$2) OR (sender=$2 AND recipient=$1)`,[u,to]);
+    socket.emit("direct_chat_deleted",{username:to});
+    broadcastUser(to,"direct_chat_deleted",{username:u});
+  });
+
+  socket.on("block_user", async d => {
+    const u=requireUser(socket); if(!u)return;
+    const to=cleanUser(d.username);
+    if(u===to)return;
+    await pool.query(`INSERT INTO user_blocks(blocker,blocked) VALUES($1,$2) ON CONFLICT DO NOTHING`,[u,to]);
+    socket.emit("user_blocked",{username:to});
+  });
+
   socket.on("get_direct_messages", async d => {
     const u=requireUser(socket); if(!u)return;
     const to=cleanUser(d.username);
@@ -418,10 +443,22 @@ io.on("connection", socket => {
     if(chat.rowCount)emitChat(chat.rows[0].chat_id,"comment_added",r.rows[0]);
   });
 
+  socket.on("profile_remove_channel", async d => {
+    const u=requireUser(socket); if(!u)return;
+    await pool.query(`DELETE FROM profile_channels WHERE username=$1 AND chat_id=$2`,[u,d.chatId]);
+    socket.emit("profile_channel_removed",d.chatId);
+  });
+
   socket.on("profile_add_channel", async d => {
     const u=requireUser(socket); if(!u)return;
     const c=await pool.query(`SELECT id FROM chats WHERE id=$1 AND owner=$2 AND kind='channel'`,[d.chatId,u]);
     if(c.rowCount)await pool.query(`INSERT INTO profile_channels(username,chat_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,[u,d.chatId]);
+  });
+
+  socket.on("owner_list_channels", async d => {
+    if(String(d.password||"")!==OWNER_PASSWORD)return;
+    const r=await pool.query(`SELECT id,name,avatar,owner,verified,created_at FROM chats WHERE kind='channel' ORDER BY created_at DESC`);
+    socket.emit("owner_channels",r.rows);
   });
 
   socket.on("owner_login", d => {

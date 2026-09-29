@@ -1,39 +1,35 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="uk">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>WebChat</title>
-<link rel="stylesheet" href="/style.css">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>WebChat</title><link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<div id="auth" class="overlay"><div class="card auth-card">
-  <h1>WebChat</h1><p class="muted">Твій простір для чатів і каналів</p>
-  <label class="avatar-picker"><img id="regAvatar" src="https://i.imgur.com/6VBx3io.png"><span>Обрати аватар</span><input id="regFile" type="file" accept="image/*"></label>
-  <input id="regUser" placeholder="@юзернейм"><input id="regNick" placeholder="Нікнейм">
-  <button id="loginBtn">Увійти</button><div id="authError" class="error"></div>
-</div></div>
-
-<div id="app" class="app hidden">
-  <aside id="sidebar">
-    <div class="me"><img id="myAvatar"><div><b id="myNick"></b><small id="myUser"></small></div><button id="profileBtn">⚙</button></div>
-    <div class="search"><input id="search" placeholder="Пошук @юзера або назви каналу"><button id="searchBtn">🔍</button></div>
-    <div id="searchResult"></div>
-    <div class="side-actions"><button onclick="openCreate('channel')">＋ Канал</button><button onclick="openCreate('group')">＋ Чат</button><button onclick="openShop()">💎 Магазин</button></div>
-    <h5>ВАШІ ЧАТИ</h5><div id="chats"></div>
-  </aside>
-  <main id="main">
-    <header id="header"><button id="back">←</button><div id="headerInfo">Оберіть чат</div><button id="headerMore">⋮</button></header>
-    <div id="feed"><div class="empty">Оберіть чат, канал або групу</div></div>
-    <div id="composer" class="composer hidden">
-      <input type="file" id="attach" hidden accept="image/*,video/*">
-      <button onclick="document.getElementById('attach').click()">📎</button><button id="voice">🎙️</button>
-      <input id="msg" placeholder="Повідомлення..."><button id="send">➤</button>
-    </div>
-  </main>
+<div id="auth" class="auth-screen">
+  <div class="auth-card">
+    <div class="logo-mark">W</div><h1>WebChat</h1><p>Спілкуйся, підписуйся, створюй.</p>
+    <label class="gallery-avatar"><img id="regAvatar" src="https://i.imgur.com/6VBx3io.png"><span>📷 Обрати з галереї</span><input id="regFile" type="file" accept="image/*"></label>
+    <input id="regUser" placeholder="@юзернейм" maxlength="32"><input id="regNick" placeholder="Ім'я або нікнейм" maxlength="60">
+    <button class="primary" id="loginBtn">Увійти</button><div id="authError" class="error"></div>
+    <button class="owner-link" id="ownerOpenAuth">Панель власника</button>
+  </div>
 </div>
 
-<div id="modal" class="overlay hidden"><div class="modal card" id="modalContent"></div></div>
+<div id="app" class="app hidden">
+  <aside id="sidebar" class="sidebar">
+    <div class="topbar"><div class="me" id="profileBtn"><div class="avatar-wrap"><img id="myAvatar"><span class="online-dot"></span></div><div class="me-text"><b id="myNick"></b><small id="myUser"></small></div></div><button class="icon-btn" id="menuBtn">☰</button></div>
+    <div class="searchbar"><span>🔎</span><input id="search" placeholder="Пошук"><button id="searchBtn">➤</button></div>
+    <div id="searchResult"></div>
+    <div class="quick-actions"><button onclick="openCreate('channel')">📢 Канал</button><button onclick="openCreate('group')">👥 Чат</button></div>
+    <div class="section-title">ЧАТИ</div><div id="chats" class="chat-list"></div>
+    <div class="bottom-nav"><button id="shopBtn">💎<small>Магазин</small></button><button id="ownerBtn">🛡️<small>Власник</small></button><button id="profileBottom">👤<small>Профіль</small></button></div>
+  </aside>
+  <main id="main" class="main">
+    <header id="header" class="chat-header"><button id="back" class="back-btn">‹</button><div id="headerAvatar" class="header-avatar"></div><div id="headerInfo" class="header-info"><b>WebChat</b><small>Оберіть чат або знайдіть користувача</small></div><button id="headerMore" class="icon-btn">⋮</button></header>
+    <div id="feed" class="feed"><div class="empty-state"><div>💬</div><b>Ваші повідомлення</b><span>Знайдіть людину або канал через пошук</span></div></div>
+    <div id="composer" class="composer hidden"><input id="attach" type="file" hidden accept="image/*,video/*"><button id="attachBtn" class="round-btn">📎</button><button id="voice" class="round-btn">🎙️</button><input id="msg" placeholder="Повідомлення..."><button id="send" class="send-btn">➤</button></div>
+  </main>
+</div>
+<div id="modal" class="modal-layer hidden"><div id="modalContent" class="modal-card"></div></div>
 <script src="/socket.io/socket.io.js"></script><script src="/app.js"></script>
-</body>
-</html>
+</body></html>
