@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: webchat
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: OWNER_PASSWORD
+        sync: false
+      - key: NODE_ENV
+        value: production
+    autoDeploy: true

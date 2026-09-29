@@ -1,14 +1,12 @@
 {
   "name": "webchat",
-  "version": "1.0.0",
-  "description": "WebChat with Socket.io and SQLite",
+  "version": "2.0.0",
+  "description": "Persistent WebChat with channels, groups, profiles, crystals and PostgreSQL",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
+  "scripts": { "start": "node server.js" },
   "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5",
-    "sqlite3": "^5.1.7"
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1",
+    "pg": "^8.13.1"
   }
 }
