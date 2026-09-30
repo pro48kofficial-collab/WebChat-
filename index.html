@@ -31,6 +31,7 @@
   </main>
 </div>
 <div id="modal" class="modal-layer hidden"><div id="modalContent" class="modal-card"></div></div>
+<div id="incomingCallLayer" class="call-layer hidden"><div class="incoming-call-card"><div id="incomingCallAvatar" class="incoming-avatar"></div><h2 id="incomingCallTitle">Вхідний дзвінок</h2><div id="incomingCallType">📞 Аудіодзвінок</div><div class="incoming-actions"><button id="rejectCall" class="end-call">Відхилити</button><button id="acceptCall" class="accept-call">Прийняти</button></div></div></div>
 <div id="callLayer" class="call-layer hidden"><div class="call-card"><div id="callTitle" class="call-title">Дзвінок</div><video id="remoteVideo" class="remote-video" autoplay playsinline></video><video id="localVideo" class="local-video" autoplay muted playsinline></video><div id="callStatus" class="call-status">Підключення…</div><div class="call-controls"><button id="muteCall">🎙️</button><button id="cameraCall">📷</button><button id="endCall" class="end-call">📞</button></div></div></div>
 <div id="liveLayer" class="call-layer hidden"><div class="call-card live-card"><div id="liveTitle" class="call-title">📺 Трансляція</div><video id="liveVideo" class="remote-video" autoplay playsinline controls></video><div id="liveStatus" class="call-status">Підключення до трансляції…</div><div class="call-controls"><button id="stopLive" class="end-call">Завершити</button></div></div></div>
 <script src="/socket.io/socket.io.js"></script><script src="/app.js"></script>

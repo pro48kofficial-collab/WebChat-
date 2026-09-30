@@ -17,3 +17,18 @@
 
 .room-profile-head{position:relative;width:min(760px,100%);height:170px;margin:0 auto 20px;border-radius:14px;overflow:visible;background:#14283a}.room-banner{width:100%;height:170px;display:block;object-fit:cover;border-radius:14px;filter:brightness(.82)}.room-avatar-overlay{position:absolute;left:22px;bottom:-34px;padding:4px;background:#091521;border-radius:50%;box-shadow:0 3px 14px #0008}.room-avatar-overlay .avatar-decor{width:86px;height:86px;--avatar-size:86px}.room-profile-head + .bubble{margin-top:16px}.channel-cover{display:none}
 .header-actions{display:flex;align-items:center;gap:2px}.call-layer{position:fixed;inset:0;background:#07111aee;z-index:300;display:flex;align-items:center;justify-content:center;padding:12px}.call-card{position:relative;width:min(900px,96vw);height:min(760px,94vh);background:#102031;border:1px solid #29445d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column}.call-title{padding:14px;text-align:center;font-weight:700;background:#12283a;z-index:2}.remote-video{width:100%;height:100%;object-fit:contain;background:#050a0e;flex:1}.local-video{position:absolute;right:16px;top:65px;width:min(180px,30vw);height:min(240px,30vh);object-fit:cover;background:#050a0e;border-radius:12px;border:2px solid #fff5;z-index:3}.call-status{text-align:center;color:#a8bfd1;padding:8px}.call-controls{display:flex;justify-content:center;gap:12px;padding:12px;background:#102031}.call-controls button{width:48px;height:48px;border-radius:50%;background:#243b50;color:#fff;font-size:18px}.call-controls .end-call{background:#d84b57}.live-card{height:min(820px,95vh)}.live-card .remote-video{object-fit:contain}.live-card .call-controls button.end-call{width:auto;border-radius:12px;padding:0 18px}.live-badge{display:inline-flex;background:#e54855;color:white;border-radius:7px;padding:3px 7px;font-size:11px;margin-left:5px}@media(max-width:760px){.header-actions .icon-btn{font-size:20px}.call-card{width:100%;height:100%;border-radius:0}.local-video{width:115px;height:160px;right:10px;top:60px}}
+
+/* WebChat 6.0 message/scroll/call refinements */
+.feed{min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;scrollbar-gutter:stable;padding-bottom:22px}
+.bubble{width:max-content;max-width:min(680px,82%);min-width:0;overflow:visible}
+.message-text{white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+.message-media{display:block;width:auto;height:auto;max-width:100%;max-height:none;object-fit:contain;margin:7px 0 0;border-radius:11px}
+.media-wrap{display:block;width:auto;max-width:100%;overflow:hidden;border-radius:11px}
+.incoming-call-card{width:min(360px,92vw);background:#102031;border:1px solid #29445d;border-radius:22px;padding:28px;text-align:center;box-shadow:0 20px 70px #000b}
+.incoming-avatar{display:grid;place-items:center;margin:0 auto 12px}
+.incoming-avatar img{width:86px;height:86px;border-radius:50%;object-fit:cover}
+.incoming-call-card h2{margin:8px 0 5px}.incoming-call-card>div:not(.incoming-avatar){color:#9fb3c4}
+.incoming-actions{display:flex;gap:10px;margin-top:24px}.incoming-actions button{flex:1;padding:13px;border-radius:12px;color:#fff}.incoming-actions .end-call{background:#d84b57}.incoming-actions .accept-call{background:#20a968}
+.last-seen{color:#7890a3;font-size:12px}
+.permission-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.permission-card{background:#14283a;border:1px solid #29455d;border-radius:13px;padding:12px}.permission-card button{width:100%;margin-top:8px}
+@media(max-width:760px){.bubble{max-width:92%}.message-media{max-width:100%}.permission-grid{grid-template-columns:1fr}}
