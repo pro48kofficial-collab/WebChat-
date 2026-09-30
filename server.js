@@ -139,6 +139,17 @@ async function initDb() {
       blocked TEXT,
       PRIMARY KEY(blocker, blocked)
     );
+    CREATE TABLE IF NOT EXISTS channel_admins (
+      chat_id TEXT REFERENCES chats(id) ON DELETE CASCADE,
+      username TEXT REFERENCES users(username) ON DELETE CASCADE,
+      can_delete BOOLEAN DEFAULT FALSE,
+      can_edit BOOLEAN DEFAULT FALSE,
+      can_edit_channel BOOLEAN DEFAULT FALSE,
+      can_publish BOOLEAN DEFAULT FALSE,
+      can_kick BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY(chat_id, username)
+    );
   `);
   for (const [id,name,style,price] of frames)
     await pool.query(`INSERT INTO inventory(username,item_id,item_type) SELECT 'SYSTEM', $1,'frame' WHERE FALSE ON CONFLICT DO NOTHING`, [id]);
@@ -163,6 +174,14 @@ function broadcastUser(username, event, data) {
 }
 function emitChat(chatId, event, data) {
   io.to("chat:"+chatId).emit(event,data);
+}
+async function channelPerms(chatId, username) {
+  const c=(await pool.query("SELECT owner,kind FROM chats WHERE id=$1",[chatId])).rows[0];
+  if(!c) return null;
+  if(c.owner===username) return {owner:true,can_delete:true,can_edit:true,can_edit_channel:true,can_publish:true,can_kick:true};
+  if(c.kind!=="channel") return {owner:false,can_delete:false,can_edit:false,can_edit_channel:false,can_publish:true,can_kick:false};
+  const r=await pool.query("SELECT can_delete,can_edit,can_edit_channel,can_publish,can_kick FROM channel_admins WHERE chat_id=$1 AND username=$2",[chatId,username]);
+  return {owner:false,can_delete:!!r.rows[0]?.can_delete,can_edit:!!r.rows[0]?.can_edit,can_edit_channel:!!r.rows[0]?.can_edit_channel,can_publish:!!r.rows[0]?.can_publish,can_kick:!!r.rows[0]?.can_kick};
 }
 
 io.on("connection", socket => {
@@ -219,7 +238,7 @@ io.on("connection", socket => {
 
   socket.on("search_user", async name => {
     const u=cleanUser(name);
-    const r=await pool.query(`SELECT username,nickname,avatar,description FROM users WHERE username=$1`,[u]);
+    const r=await pool.query(`SELECT username,nickname,avatar,description,frame,badge FROM users WHERE username=$1`,[u]);
     if(r.rowCount) socket.emit("user_found",{...r.rows[0],online:!!activeUsers.get(u)?.size});
     else {
       const c=await pool.query(`SELECT id,name,avatar,description,banner,owner,kind,verified FROM chats WHERE lower(name)=lower($1) LIMIT 1`,[String(name).replace(/^@/,"")]);
@@ -234,7 +253,7 @@ io.on("connection", socket => {
     const partners=dm.rows.map(x=>x.partner);
     let direct=[];
     if(partners.length){
-      const r=await pool.query(`SELECT username,nickname,avatar,description FROM users WHERE username=ANY($1::text[])`,[partners]);
+      const r=await pool.query(`SELECT username,nickname,avatar,description,frame,badge FROM users WHERE username=ANY($1::text[])`,[partners]);
       const by=new Map(r.rows.map(x=>[x.username,x]));
       direct=dm.rows.map(x=>({...(by.get(x.partner)||{username:x.partner,nickname:x.partner,avatar:null}),kind:'dm',name:by.get(x.partner)?.nickname||x.partner,online:!!activeUsers.get(x.partner)?.size,last_at:x.created_at}));
     }
@@ -306,8 +325,10 @@ io.on("connection", socket => {
 
   socket.on("edit_chat", async d => {
     const u=requireUser(socket); if(!u)return;
-    const r=await pool.query(`UPDATE chats SET name=$1,avatar=$2,description=$3,banner=$4 WHERE id=$5 AND owner=$6 RETURNING *`,
-      [String(d.name||"").slice(0,80),d.avatar||DEFAULT_AVATAR,String(d.description||"").slice(0,500),d.banner||null,d.chatId,u]);
+    const perms=await channelPerms(d.chatId,u);
+    if(!perms || (!perms.owner && !perms.can_edit_channel)) return socket.emit("error_msg","У вас немає дозволу редагувати цей канал.");
+    const r=await pool.query(`UPDATE chats SET name=$1,avatar=$2,description=$3,banner=$4 WHERE id=$5 RETURNING *`,
+      [String(d.name||"").slice(0,80),d.avatar||DEFAULT_AVATAR,String(d.description||"").slice(0,500),d.banner||null,d.chatId]);
     if(r.rowCount){ emitChat(d.chatId,"chat_updated",r.rows[0]); socket.emit("chat_updated",r.rows[0]); }
   });
 
@@ -317,7 +338,7 @@ io.on("connection", socket => {
     if(!member.rowCount)return socket.emit("error_msg","Спочатку приєднайтесь.");
     socket.join("chat:"+d.chatId);
     const c=(await pool.query("SELECT * FROM chats WHERE id=$1",[d.chatId])).rows[0];
-    const m=(await pool.query(`SELECT m.*,u.nickname,u.avatar FROM messages m LEFT JOIN users u ON u.username=m.sender WHERE m.chat_id=$1 ORDER BY m.created_at ASC LIMIT 500`,[d.chatId])).rows;
+    const m=(await pool.query(`SELECT m.*,u.nickname,u.avatar,u.frame,u.badge FROM messages m LEFT JOIN users u ON u.username=m.sender WHERE m.chat_id=$1 ORDER BY m.created_at ASC LIMIT 500`,[d.chatId])).rows;
     const p=(await pool.query("SELECT * FROM polls WHERE chat_id=$1",[d.chatId])).rows;
     const comments=(await pool.query("SELECT * FROM comments WHERE message_id IN (SELECT id FROM messages WHERE chat_id=$1) ORDER BY created_at ASC",[d.chatId])).rows;
     socket.emit("chat_opened",{chat:c,messages:m,polls:p,comments});
@@ -327,6 +348,8 @@ io.on("connection", socket => {
     const u=requireUser(socket); if(!u)return;
     const mem=await pool.query("SELECT 1 FROM chat_members WHERE chat_id=$1 AND username=$2",[d.chatId,u]);
     if(!mem.rowCount)return;
+    const perms=await channelPerms(d.chatId,u);
+    if(perms && !perms.can_publish)return socket.emit("error_msg","У вас немає дозволу публікувати повідомлення в цьому каналі.");
     const id=uid("msg");
     const r=await pool.query(`INSERT INTO messages(id,chat_id,sender,text,file_data,file_name,file_type,reply_to) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
       [id,d.chatId,u,String(d.text||"").slice(0,5000),d.fileData||null,d.fileName||null,d.fileType||null,d.replyTo||null]);
@@ -370,19 +393,27 @@ io.on("connection", socket => {
 
   socket.on("edit_message", async d => {
     const u=requireUser(socket); if(!u)return;
-    let r=await pool.query(`UPDATE direct_messages SET text=$1,edited=true WHERE id=$2 AND sender=$3 RETURNING *`,[String(d.newText||"").slice(0,5000),d.id,u]);
-    if(!r.rowCount) r=await pool.query(`UPDATE messages SET text=$1,edited=true WHERE id=$2 AND sender=$3 RETURNING *`,[String(d.newText||"").slice(0,5000),d.id,u]);
-    if(r.rowCount){ const m=r.rows[0]; if(m.chat_id)emitChat(m.chat_id,"message_updated",m); else {broadcastUser(m.recipient,"message_updated",m);socket.emit("message_updated",m);} }
+    let r=await pool.query(`SELECT * FROM messages WHERE id=$1`,[d.id]);
+    if(r.rowCount){
+      const m=r.rows[0], perms=await channelPerms(m.chat_id,u);
+      if(m.sender!==u && !perms?.can_edit)return socket.emit("error_msg","У вас немає дозволу редагувати це повідомлення.");
+      r=await pool.query(`UPDATE messages SET text=$1,edited=true WHERE id=$2 RETURNING *`,[String(d.newText||"").slice(0,5000),d.id]);
+      emitChat(m.chat_id,"message_updated",r.rows[0]); return;
+    }
+    r=await pool.query(`UPDATE direct_messages SET text=$1,edited=true WHERE id=$2 AND sender=$3 RETURNING *`,[String(d.newText||"").slice(0,5000),d.id,u]);
+    if(r.rowCount){ const m=r.rows[0]; broadcastUser(m.recipient,"message_updated",m); socket.emit("message_updated",m); }
   });
-
   socket.on("delete_message", async d => {
     const u=requireUser(socket); if(!u)return;
-    let r=await pool.query(`DELETE FROM direct_messages WHERE id=$1 AND sender=$2 RETURNING id,recipient`,[d.id,u]);
-    if(r.rowCount){ socket.emit("message_deleted",r.rows[0]); broadcastUser(r.rows[0].recipient,"message_deleted",{id:d.id}); return; }
-    r=await pool.query(`DELETE FROM messages WHERE id=$1 AND sender=$2 RETURNING id,chat_id`,[d.id,u]);
-    if(r.rowCount) emitChat(r.rows[0].chat_id,"message_deleted",{id:d.id});
+    let r=await pool.query(`SELECT * FROM messages WHERE id=$1`,[d.id]);
+    if(r.rowCount){
+      const m=r.rows[0], perms=await channelPerms(m.chat_id,u);
+      if(m.sender!==u && !perms?.can_delete)return socket.emit("error_msg","У вас немає дозволу видаляти це повідомлення.");
+      await pool.query(`DELETE FROM messages WHERE id=$1`,[d.id]); emitChat(m.chat_id,"message_deleted",{id:d.id}); return;
+    }
+    r=await pool.query(`DELETE FROM direct_messages WHERE id=$1 AND sender=$2 RETURNING id,recipient`,[d.id,u]);
+    if(r.rowCount){ socket.emit("message_deleted",r.rows[0]); broadcastUser(r.rows[0].recipient,"message_deleted",{id:d.id}); }
   });
-
   socket.on("pin_message", async d => {
     const u=requireUser(socket); if(!u)return;
     let r=await pool.query(`UPDATE direct_messages SET pinned=true WHERE id=$1 AND sender=$2 RETURNING *`,[d.id,u]);
@@ -417,6 +448,7 @@ io.on("connection", socket => {
     const u=requireUser(socket); if(!u)return;
     const mem=await pool.query(`SELECT 1 FROM chat_members WHERE chat_id=$1 AND username=$2`,[d.chatId,u]);
     if(!mem.rowCount)return;
+    const perms=await channelPerms(d.chatId,u); if(!perms?.can_publish)return socket.emit("error_msg","У вас немає дозволу публікувати в цьому каналі.");
     const mid=uid("msg"), pid=uid("poll");
     await pool.query(`INSERT INTO messages(id,chat_id,sender,text) VALUES($1,$2,$3,$4)`,[mid,d.chatId,u,"📊 Опитування"]);
     const options=(d.options||[]).map(x=>String(x).slice(0,100)).filter(Boolean).slice(0,10);
@@ -441,6 +473,48 @@ io.on("connection", socket => {
     const r=await pool.query(`INSERT INTO comments(id,message_id,sender,text) VALUES($1,$2,$3,$4) RETURNING *`,[uid("comment"),d.messageId,u,String(d.text||"").slice(0,2000)]);
     const chat=await pool.query(`SELECT chat_id FROM messages WHERE id=$1`,[d.messageId]);
     if(chat.rowCount)emitChat(chat.rows[0].chat_id,"comment_added",r.rows[0]);
+  });
+
+  socket.on("channel_admin_data", async d => {
+    const u=requireUser(socket); if(!u)return;
+    const c=(await pool.query(`SELECT * FROM chats WHERE id=$1 AND kind='channel'`,[d.chatId])).rows[0];
+    if(!c)return socket.emit("error_msg","Канал не знайдено.");
+    const members=await pool.query(`SELECT cm.username,cm.role,u.nickname,u.avatar,ca.can_delete,ca.can_edit,ca.can_edit_channel,ca.can_publish,ca.can_kick FROM chat_members cm JOIN users u ON u.username=cm.username LEFT JOIN channel_admins ca ON ca.chat_id=cm.chat_id AND ca.username=cm.username WHERE cm.chat_id=$1 ORDER BY CASE WHEN cm.username=$2 THEN 0 WHEN cm.role='admin' THEN 1 ELSE 2 END,u.nickname`,[d.chatId,c.owner]);
+    socket.emit("channel_admin_data",{chat:c,members:members.rows,permissions:await channelPerms(d.chatId,u)});
+  });
+
+  socket.on("set_channel_admin", async d => {
+    const u=requireUser(socket); if(!u)return;
+    const c=(await pool.query(`SELECT * FROM chats WHERE id=$1 AND kind='channel'`,[d.chatId])).rows[0];
+    if(!c || c.owner!==u)return socket.emit("error_msg","Тільки власник може призначати адміністраторів.");
+    const target=cleanUser(d.username); if(target===u)return;
+    const member=await pool.query(`SELECT 1 FROM chat_members WHERE chat_id=$1 AND username=$2`,[d.chatId,target]);
+    if(!member.rowCount)return socket.emit("error_msg","Користувач не є підписником каналу.");
+    const p=d.permissions||{};
+    await pool.query(`INSERT INTO channel_admins(chat_id,username,can_delete,can_edit,can_edit_channel,can_publish,can_kick) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(chat_id,username) DO UPDATE SET can_delete=EXCLUDED.can_delete,can_edit=EXCLUDED.can_edit,can_edit_channel=EXCLUDED.can_edit_channel,can_publish=EXCLUDED.can_publish,can_kick=EXCLUDED.can_kick`,[d.chatId,target,!!p.can_delete,!!p.can_edit,!!p.can_edit_channel,!!p.can_publish,!!p.can_kick]);
+    await pool.query(`UPDATE chat_members SET role='admin' WHERE chat_id=$1 AND username=$2`,[d.chatId,target]);
+    emitChat(d.chatId,"channel_admin_changed",{username:target}); socket.emit("channel_admin_saved");
+  });
+
+  socket.on("remove_channel_admin", async d => {
+    const u=requireUser(socket); if(!u)return;
+    const c=(await pool.query(`SELECT owner FROM chats WHERE id=$1 AND kind='channel'`,[d.chatId])).rows[0];
+    if(!c || c.owner!==u)return;
+    await pool.query(`DELETE FROM channel_admins WHERE chat_id=$1 AND username=$2`,[d.chatId,cleanUser(d.username)]);
+    await pool.query(`UPDATE chat_members SET role='member' WHERE chat_id=$1 AND username=$2`,[d.chatId,cleanUser(d.username)]);
+    emitChat(d.chatId,"channel_admin_changed",{username:cleanUser(d.username)});
+  });
+
+  socket.on("kick_channel_member", async d => {
+    const u=requireUser(socket); if(!u)return;
+    const perms=await channelPerms(d.chatId,u); if(!perms?.can_kick)return socket.emit("error_msg","У вас немає дозволу видаляти підписників.");
+    const target=cleanUser(d.username);
+    const c=(await pool.query(`SELECT owner FROM chats WHERE id=$1`,[d.chatId])).rows[0];
+    if(c?.owner===target)return;
+    await pool.query(`DELETE FROM chat_members WHERE chat_id=$1 AND username=$2`,[d.chatId,target]);
+    await pool.query(`DELETE FROM channel_admins WHERE chat_id=$1 AND username=$2`,[d.chatId,target]);
+    emitChat(d.chatId,"channel_member_removed",{username:target});
+    broadcastUser(target,"left_chat",d.chatId);
   });
 
   socket.on("profile_remove_channel", async d => {
@@ -476,7 +550,7 @@ io.on("connection", socket => {
     if(c.rowCount){await pool.query("DELETE FROM chats WHERE id=$1",[d.chatId]);io.emit("chat_deleted",d.chatId);}
   });
 
-  socket.on("shop_catalog",()=>socket.emit("shop_catalog",{frames, badges}));
+  socket.on("shop_catalog",async()=>{const u=requireUser(socket);if(!u)return;const owned=(await pool.query(`SELECT item_id,item_type FROM inventory WHERE username=$1`,[u])).rows;const mep=(await pool.query(`SELECT frame,badge FROM users WHERE username=$1`,[u])).rows[0]||{};socket.emit("shop_catalog",{frames,badges,owned,equipped:{frame:mep.frame||"",badge:mep.badge||""}})});
   socket.on("buy_item", async d=>{
     const u=requireUser(socket);if(!u)return;
     const itemType=d.type,itemId=d.id;
