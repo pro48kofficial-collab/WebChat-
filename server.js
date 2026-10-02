@@ -184,6 +184,8 @@ async function channelPerms(chatId, username) {
   return {owner:false,can_delete:!!r.rows[0]?.can_delete,can_edit:!!r.rows[0]?.can_edit,can_edit_channel:!!r.rows[0]?.can_edit_channel,can_publish:!!r.rows[0]?.can_publish,can_kick:!!r.rows[0]?.can_kick};
 }
 
+const liveStreams = new Map(); // chatId -> {hostSocket, hostUsername}
+
 io.on("connection", socket => {
   socket.on("register", async data => {
     try {
@@ -626,7 +628,65 @@ io.on("connection", socket => {
     if(r.rowCount)socket.emit("owner_balance_result",{username:target,crystals:"∞"});
   });
 
+  socket.on("call_offer", d => {
+    const u=requireUser(socket); if(!u || !d?.to || !d?.offer)return;
+    const target=cleanUser(d.to);
+    if(!(activeUsers.get(target)?.size)){ socket.emit("call_unavailable",{username:target,to:target}); return; }
+    broadcastUser(target,"incoming_call",{from:u,offer:d.offer,type:d.type||"audio",callId:d.callId||socket.id});
+    socket.emit("call_delivered",{to:target});
+  });
+  socket.on("call_answer", d => {
+    const u=requireUser(socket); if(!u || !d?.to || !d?.answer)return;
+    broadcastUser(d.to,"call_answer",{from:u,answer:d.answer});
+  });
+  socket.on("call_ice", d => {
+    const u=requireUser(socket); if(!u || !d?.to || !d?.candidate)return;
+    broadcastUser(d.to,"call_ice",{from:u,candidate:d.candidate});
+  });
+  socket.on("call_end", d => {
+    const u=requireUser(socket); if(!u || !d?.to)return;
+    broadcastUser(d.to,"call_ended",{from:u});
+  });
+
+  socket.on("live_start", d => {
+    const u=requireUser(socket); if(!u || !d?.chatId)return;
+    const id=String(d.chatId);
+    pool.query("SELECT * FROM chats WHERE id=$1 AND kind='channel'",[id]).then(async r=>{
+      const c=r.rows[0]; if(!c)return;
+      const perms=await channelPerms(id,u); if(!perms?.can_publish)return socket.emit("error_msg","У вас немає дозволу на трансляцію.");
+      liveStreams.set(id,{hostSocket:socket.id,hostUsername:u});
+      io.to("chat:"+id).emit("live_started",{chatId:id,host:u});
+    }).catch(()=>{});
+  });
+  socket.on("live_join", async d => {
+    const u=requireUser(socket); if(!u || !d?.chatId)return;
+    const id=String(d.chatId);
+    const member=await pool.query("SELECT 1 FROM chat_members WHERE chat_id=$1 AND username=$2",[id,u]);
+    if(!member.rowCount)return socket.emit("error_msg","Спочатку підпишіться на канал.");
+    const live=liveStreams.get(id);
+    if(!live || live.hostSocket===socket.id)return socket.emit("error_msg","Трансляція зараз недоступна.");
+    io.to(live.hostSocket).emit("live_viewer_join",{viewerSocket:socket.id,viewer:u});
+  });
+  socket.on("live_offer", d => {
+    const u=requireUser(socket); if(!u || !d?.to || !d?.offer)return;
+    io.to(String(d.to)).emit("live_offer",{offer:d.offer,fromSocket:socket.id});
+  });
+  socket.on("live_answer", d => {
+    const u=requireUser(socket); if(!u || !d?.to || !d?.answer)return;
+    io.to(String(d.to)).emit("live_answer",{answer:d.answer,viewerSocket:socket.id});
+  });
+  socket.on("live_ice", d => {
+    const u=requireUser(socket); if(!u || !d?.to || !d?.candidate)return;
+    io.to(String(d.to)).emit("live_ice",{candidate:d.candidate,fromSocket:socket.id});
+  });
+  socket.on("live_stop", d => {
+    const u=requireUser(socket); if(!u || !d?.chatId)return;
+    const id=String(d.chatId), live=liveStreams.get(id);
+    if(live && live.hostSocket===socket.id){liveStreams.delete(id);io.to("chat:"+id).emit("live_stopped",{chatId:id});}
+  });
+
   socket.on("disconnect",()=>{
+    for(const [chatId,live] of liveStreams){if(live.hostSocket===socket.id){liveStreams.delete(chatId);io.to("chat:"+chatId).emit("live_stopped",{chatId});}}
     const u=sessions.get(socket.id); sessions.delete(socket.id);
     if(u){const s=activeUsers.get(u);if(s){s.delete(socket.id);if(!s.size){activeUsers.delete(u);io.emit("status_update",{username:u,online:false});}}}
   });

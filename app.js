@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
 const DEFAULT_AVATAR="https://i.imgur.com/6VBx3io.png";
 let me=null,current=null,currentKind=null,selectedFile=null,recording=null,recordChunks=[],ownerPass="",roomComments=[],roomPerms=null;
-let callPC=null,callStream=null,callType=null,callPeer=null,callMuted=false,callCamera=false;
+let callPC=null,callStream=null,callType=null,callPeer=null,callMuted=false,callCamera=false,callIceQueue=[];
 const livePeers=new Map(); let liveHost=false,liveStream=null,liveChatId=null,livePC=null;
 
 function compressImage(file,cb,max=700){const r=new FileReader();r.onload=e=>{const i=new Image();i.onload=()=>{const c=document.createElement("canvas"),s=Math.min(1,max/Math.max(i.width,i.height));c.width=Math.max(1,Math.round(i.width*s));c.height=Math.max(1,Math.round(i.height*s));c.getContext("2d").drawImage(i,0,0,c.width,c.height);cb(c.toDataURL("image/jpeg",.78))};i.src=e.target.result};r.readAsDataURL(file)}
@@ -26,8 +26,10 @@ socket.on("register_error",m=>$("authError").textContent=m);socket.on("error_msg
 socket.on("balance_update",x=>{if(!me)return;Object.assign(me,x);setAppAvatar(me.avatar)});
 socket.on("chats_list",list=>{$("chats").innerHTML="";(list||[]).forEach(addChat)});
 function addChat(c){const d=document.createElement("div");d.className="chat";d.dataset.id=c.id||c.username;const isDM=c.kind==="dm";d.innerHTML=`${avatarHtml(c,"small")}<div class="ct"><b>${esc(c.name||c.nickname||c.username)} ${c.verified?'<span class="verified">✓</span>':''}</b><small>${isDM?(c.online?'🟢 онлайн':'⚪ офлайн'):(c.kind==="channel"?'📢 Канал':'👥 Група')}</small></div>`;d.onclick=()=>isDM?openDM(c):openRoom(c);$("chats").appendChild(d)}
+function scrollFeedToBottom(){const feed=$("feed");if(!feed)return;requestAnimationFrame(()=>{feed.scrollTop=feed.scrollHeight;});}
+function shouldStickToBottom(){const feed=$("feed");if(!feed)return true;return feed.scrollHeight-feed.scrollTop-feed.clientHeight<90;}
 function openRoom(c){$('headerActions').classList.add('hidden');current=c;currentKind="room";roomPerms=null;roomComments=[];$('sidebar').classList.add('mobile-hide');$('composer').classList.remove('hidden');$('headerAvatar').innerHTML=avatarHtml(c);$('headerInfo').innerHTML=`<b>${esc(c.name)} ${c.verified?'<span class="verified">✓</span>':''}</b><small>${esc(c.kind==="channel"?"Канал · "+(c.description||"Натисніть ⋮ для дій"):c.description||"Груповий чат")}</small>`;$('feed').innerHTML="";socket.emit("open_chat",{chatId:c.id});if(c.kind==="channel")socket.emit("channel_admin_data",{chatId:c.id})}
-socket.on("chat_opened",x=>{setHeaderMode();current=x.chat;roomComments=x.comments||[];$('feed').innerHTML="";if(x.chat.banner)$('feed').insertAdjacentHTML("beforeend",`<div class="room-profile-head"><img class="room-banner" src="${x.chat.banner}" alt="Банер"><div class="room-avatar-overlay">${avatarHtml(x.chat)}</div></div>`);(x.messages||[]).forEach(renderRoomMessage);(x.polls||[]).forEach(renderPoll);$('feed').scrollTop=$('feed').scrollHeight});
+socket.on("chat_opened",x=>{setHeaderMode();current=x.chat;roomComments=x.comments||[];$('feed').innerHTML="";if(x.chat.banner)$('feed').insertAdjacentHTML("beforeend",`<div class="room-profile-head"><img class="room-banner" src="${x.chat.banner}" alt="Банер"><div class="room-avatar-overlay">${avatarHtml(x.chat)}</div></div>`);(x.messages||[]).forEach(renderRoomMessage);(x.polls||[]).forEach(renderPoll);scrollFeedToBottom()});
 socket.on("channel_admin_data",x=>{if(current?.id!==x.chat.id)return;roomPerms=x.permissions||null;$("composer").classList.toggle("hidden",x.chat.kind==="channel"&&!roomPerms.can_publish);if(currentKind==="room")socket.emit("open_chat",{chatId:current.id})});
 
 function fileHtml(m){if(!m.file_data)return"";if((m.file_type||"").startsWith("image/"))return`<div class="media-wrap"><img class="message-media" src="${m.file_data}" alt="Фото"></div>`;if((m.file_type||"").startsWith("video/"))return`<div class="media-wrap"><video class="message-media" src="${m.file_data}" controls></video></div>`;if((m.file_type||"").startsWith("audio/"))return`<div class="audio-wrap"><audio src="${m.file_data}" controls></audio></div>`;return`<a class="file-link" href="${m.file_data}" download="${esc(m.file_name||'file')}">📎 ${esc(m.file_name||'Файл')}</a>`}
@@ -38,13 +40,13 @@ function renderRoomMessage(m){const d=document.createElement("div");d.className=
 function renderDM(m){const d=document.createElement("div");d.className="bubble"+(m.sender===me.username?" me":"");d.id="m_"+m.id;d.innerHTML=`${fileHtml(m)}${messageText(m)}<div>${reactionsHtml(m.reactions)}</div><div class="meta">${new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} ${m.edited?'· ред.':''} ${m.pinned?'· 📌':''}</div><div class="actions">${m.sender===me.username?`<button onclick="editMessage('${m.id}')">✏️</button><button onclick="deleteMessage('${m.id}')">🗑️</button>`:""}<button onclick="react('${m.id}','❤️')">❤️</button><button onclick="react('${m.id}','👍')">👍</button><button onclick="pin('${m.id}')">📌</button></div>`;$('feed').appendChild(d)}
 
 function send(){const text=$("msg").value.trim();if(!current||(!text&&!selectedFile))return;const d=currentKind==="dm"?{recipient:current.username,text,fileData:selectedFile?.data,fileName:selectedFile?.name,fileType:selectedFile?.type}:{chatId:current.id,text,fileData:selectedFile?.data,fileName:selectedFile?.name,fileType:selectedFile?.type};socket.emit(currentKind==="dm"?"send_direct_message":"send_chat_message",d);$("msg").value="";selectedFile=null;$("attach").value=""}
-$("cameraBtn").onclick=()=>$("cameraInput").click();$("cameraInput").onchange=e=>{const f=e.target.files[0];if(f)compressImage(f,data=>selectedFile={data,name:f.name,type:'image/jpeg'},1100);e.target.value=''};
+$("cameraBtn").onclick=()=>$("cameraInput").click();$("cameraInput").onchange=e=>{const f=e.target.files[0];if(f)fileToData(f,data=>selectedFile={data,name:f.name,type:f.type||'image/jpeg'});e.target.value=''};
 $("send").onclick=send;$("msg").onkeydown=e=>{if(e.key==="Enter")send()};$("attachBtn").onclick=()=>$("attach").click();$("attach").onchange=e=>{const f=e.target.files[0];if(f)fileToData(f,data=>selectedFile={data,name:f.name,type:f.type})};
 $("voice").onclick=async()=>{if(recording){recording.stop();return}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});recordChunks=[];recording=new MediaRecorder(stream);recording.ondataavailable=e=>recordChunks.push(e.data);recording.onstop=()=>{const b=new Blob(recordChunks,{type:"audio/webm"});fileToData(b,data=>{if(current)socket.emit(currentKind==="dm"?"send_direct_message":"send_chat_message",currentKind==="dm"?{recipient:current.username,text:"🎙️ Голосове",fileData:data,fileName:"voice.webm",fileType:"audio/webm"}:{chatId:current.id,text:"🎙️ Голосове",fileData:data,fileName:"voice.webm",fileType:"audio/webm"});stream.getTracks().forEach(t=>t.stop());recording=null;$('voice').textContent="🎙️"})};recording.start();$('voice').textContent="⏹️"}catch(e){alert("Браузер не дозволив доступ до мікрофона.")}};
 
-socket.on("chat_new_message",m=>{if(current?.id===m.chat_id){renderRoomMessage(m);$('feed').scrollTop=$('feed').scrollHeight}refresh()});
-socket.on("direct_history",ms=>{currentKind="dm";setHeaderMode();$('feed').innerHTML="";(ms||[]).forEach(renderDM);$('feed').scrollTop=$('feed').scrollHeight});
-socket.on("new_direct_message",m=>{if(currentKind==="dm"&&current?.username&&(m.sender===current.username||m.recipient===current.username)){renderDM(m);$('feed').scrollTop=$('feed').scrollHeight}refresh()});
+socket.on("chat_new_message",m=>{if(current?.id===m.chat_id){const stick=shouldStickToBottom();renderRoomMessage(m);if(stick)scrollFeedToBottom()}refresh()});
+socket.on("direct_history",ms=>{currentKind="dm";setHeaderMode();$('feed').innerHTML="";(ms||[]).forEach(renderDM);scrollFeedToBottom()});
+socket.on("new_direct_message",m=>{if(currentKind==="dm"&&current?.username&&(m.sender===current.username||m.recipient===current.username)){const stick=shouldStickToBottom();renderDM(m);if(stick)scrollFeedToBottom()}refresh()});
 socket.on("message_updated",m=>{const e=$("m_"+m.id);if(!e)return;e.remove();if(m.chat_id)renderRoomMessage(m);else renderDM(m)});
 window.react=(id,emoji)=>socket.emit("add_reaction",{id,emoji});window.editMessage=id=>{const t=prompt("Новий текст:");if(t!==null)socket.emit("edit_message",{id,newText:t})};window.deleteMessage=id=>{if(confirm("Видалити своє повідомлення?"))socket.emit("delete_message",{id})};window.pin=id=>socket.emit("pin_message",{id});window.comment=id=>{const t=prompt("Коментар до повідомлення:");if(t)socket.emit("add_comment",{messageId:id,text:t})};
 
@@ -105,26 +107,52 @@ socket.on("disconnect",()=>console.log('WebChat: з’єднання втрач�
 function badgeEmoji(id){return ({crystals:'💎',webchat:'💬',donater:'💰',creator:'✨',verified:'✓',star:'⭐',crown:'👑'})[id]||''}
 
 
+async function createCallPeer(){
+  callPC=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  callStream?.getTracks().forEach(t=>callPC.addTrack(t,callStream));
+  callPC.ontrack=e=>{if(e.streams[0])$('remoteVideo').srcObject=e.streams[0]};
+  callPC.onicecandidate=e=>{if(e.candidate&&callPeer)socket.emit('call_ice',{to:callPeer,candidate:e.candidate})};
+  callPC.onconnectionstatechange=()=>{const st=callPC?.connectionState;if(st==='connected')$('callStatus').textContent='Дзвінок триває';if(st==='failed')$('callStatus').textContent='Не вдалося встановити з’єднання'};
+}
+async function flushCallIce(){if(!callPC)return;for(const c of callIceQueue.splice(0)){try{await callPC.addIceCandidate(c)}catch(e){}}}
 async function startCall(type){
   if(currentKind!=='dm'||!current?.username)return;
   if(!navigator.mediaDevices?.getUserMedia)return alert('Цей браузер не підтримує камеру/мікрофон.');
-  await endCall(false);
-  callType=type;callPeer=current.username;callMuted=false;callCamera=type==='video';
-  try{callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:type==='video'});showCallUI(`${type==='video'?'📹':'📞'} ${current.nickname||current.username}`);$('localVideo').srcObject=callStream;$('localVideo').classList.toggle('hidden',type!=='video');
-    callPC=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});callStream.getTracks().forEach(t=>callPC.addTrack(t,callStream));
-    callPC.ontrack=e=>$('remoteVideo').srcObject=e.streams[0];callPC.onicecandidate=e=>e.candidate&&socket.emit('call_ice',{to:callPeer,candidate:e.candidate});
-    const offer=await callPC.createOffer();await callPC.setLocalDescription(offer);socket.emit('call_offer',{to:callPeer,offer,type});$('callStatus').textContent='Очікуємо відповіді…';
-  }catch(e){alert('Не вдалося отримати доступ до камери або мікрофона.');endCall(false)}
+  await endCall(false); callIceQueue=[]; callType=type;callPeer=current.username;callMuted=false;callCamera=type==='video';
+  try{
+    callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:type==='video'});
+    showCallUI(`${type==='video'?'📹':'📞'} ${current.nickname||current.username}`);
+    $('localVideo').srcObject=callStream;$('localVideo').classList.toggle('hidden',type!=='video');
+    await createCallPeer();
+    const offer=await callPC.createOffer();await callPC.setLocalDescription(offer);
+    socket.emit('call_offer',{to:callPeer,offer:callPC.localDescription,type,callId:socket.id});
+    $('callStatus').textContent='Виклик надсилається…';
+  }catch(e){alert('Не вдалося отримати доступ до камери або мікрофона.');await endCall(false)}
 }
 function showCallUI(title){$('callTitle').textContent=title;$('callStatus').textContent='Підключення…';$('callLayer').classList.remove('hidden')}
-async function endCall(notify=true){if(notify&&callPeer)socket.emit('call_end',{to:callPeer});if(callPC){callPC.close();callPC=null}if(callStream){callStream.getTracks().forEach(t=>t.stop());callStream=null}$('remoteVideo').srcObject=null;$('localVideo').srcObject=null;$('callLayer').classList.add('hidden');callPeer=null;callType=null}
+async function endCall(notify=true){if(notify&&callPeer)socket.emit('call_end',{to:callPeer});if(callPC){callPC.ontrack=null;callPC.onicecandidate=null;callPC.close();callPC=null}if(callStream){callStream.getTracks().forEach(t=>t.stop());callStream=null}$('remoteVideo').srcObject=null;$('localVideo').srcObject=null;$('callLayer').classList.add('hidden');callPeer=null;callType=null;callIceQueue=[]}
 $('audioCall').onclick=()=>startCall('audio');$('videoCall').onclick=()=>startCall('video');$('endCall').onclick=()=>endCall(true);
 $('muteCall').onclick=()=>{callMuted=!callMuted;callStream?.getAudioTracks().forEach(t=>t.enabled=!callMuted);$('muteCall').textContent=callMuted?'🔇':'🎙️'};
-$('cameraCall').onclick=()=>{callCamera=!callCamera;callStream?.getVideoTracks().forEach(t=>t.enabled=callCamera);$('cameraCall').textContent=callCamera?'📷':'🚫'};
-socket.on('incoming_call',async d=>{if(callPC)return;if(!confirm(`${d.from} телефонує. Прийняти?`))return socket.emit('call_end',{to:d.from});callPeer=d.from;callType=d.type;try{callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:d.type==='video'});showCallUI(`${d.type==='video'?'📹':'📞'} ${d.from}`);$('localVideo').srcObject=callStream;$('localVideo').classList.toggle('hidden',d.type!=='video');callPC=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});callStream.getTracks().forEach(t=>callPC.addTrack(t,callStream));callPC.ontrack=e=>$('remoteVideo').srcObject=e.streams[0];callPC.onicecandidate=e=>e.candidate&&socket.emit('call_ice',{to:callPeer,candidate:e.candidate});await callPC.setRemoteDescription(d.offer);const ans=await callPC.createAnswer();await callPC.setLocalDescription(ans);socket.emit('call_answer',{to:callPeer,answer:ans});$('callStatus').textContent='Дзвінок триває';}catch(e){endCall(true)}});
-socket.on('call_answer',async d=>{if(callPC)await callPC.setRemoteDescription(d.answer);$('callStatus').textContent='Дзвінок триває'});
-socket.on('call_ice',async d=>{try{if(callPC&&d.candidate)await callPC.addIceCandidate(d.candidate)}catch(e){}});
+$('cameraCall').onclick=()=>{if(callType!=='video')return;callCamera=!callCamera;callStream?.getVideoTracks().forEach(t=>t.enabled=callCamera);$('cameraCall').textContent=callCamera?'📷':'🚫'};
+socket.on('incoming_call',async d=>{
+  if(callPC)return;
+  const ok=confirm(`${d.type==='video'?'📹':'📞'} ${d.from} телефонує. Прийняти?`);
+  if(!ok){socket.emit('call_end',{to:d.from});return}
+  callPeer=d.from;callType=d.type||'audio';callIceQueue=[];
+  try{
+    callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:callType==='video'});
+    showCallUI(`${callType==='video'?'📹':'📞'} ${d.from}`);$('localVideo').srcObject=callStream;$('localVideo').classList.toggle('hidden',callType!=='video');
+    await createCallPeer();
+    await callPC.setRemoteDescription(d.offer);await flushCallIce();
+    const ans=await callPC.createAnswer();await callPC.setLocalDescription(ans);
+    socket.emit('call_answer',{to:callPeer,answer:callPC.localDescription});$('callStatus').textContent='Дзвінок триває';
+  }catch(e){$('callStatus').textContent='Не вдалося прийняти дзвінок';await endCall(true)}
+});
+socket.on('call_answer',async d=>{if(!callPC)return;try{await callPC.setRemoteDescription(d.answer);await flushCallIce();$('callStatus').textContent='Дзвінок триває'}catch(e){$('callStatus').textContent='Помилка з’єднання'}});
+socket.on('call_ice',async d=>{if(!d.candidate)return;if(callPC?.remoteDescription?.type){try{await callPC.addIceCandidate(d.candidate)}catch(e){}}else callIceQueue.push(d.candidate)});
 socket.on('call_ended',()=>endCall(false));
+socket.on('call_unavailable',d=>{if(callPeer===d.to||callPeer===d.username){$('callStatus').textContent='Користувач зараз не в мережі';setTimeout(()=>endCall(false),1800)}});
+socket.on('call_delivered',()=>{if(callPeer) $('callStatus').textContent='Виклик доставлено…'});
 
 async function startLive(){
  if(currentKind!=='room'||current?.kind!=='channel'||!(current.owner===me.username||roomPerms?.can_publish))return alert('Немає дозволу на трансляцію.');
