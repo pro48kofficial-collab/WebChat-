@@ -1,12 +1,16 @@
 {
-  "name": "webchat",
-  "version": "2.0.0",
-  "description": "Persistent WebChat with channels, groups, profiles, crystals and PostgreSQL",
+  "name": "vibe-messenger",
+  "version": "1.0.0",
+  "description": "Vibe — месенджер у стилі Telegram (Clidex Studio)",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
   "dependencies": {
-    "express": "^4.21.2",
-    "socket.io": "^4.8.1",
-    "pg": "^8.13.1"
+    "pg": "^8.11.0"
   }
 }
