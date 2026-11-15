@@ -43,6 +43,7 @@ function fileStore() {
   const mfile = (id) => path.join(MEDIA_DIR, id);
   return {
     name: 'файли (data.json + media)',
+    persistent: false,
     async init() {
       try { Object.assign(db, JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'))); } catch (e) { /* перший запуск */ }
       db.rooms = db.rooms || {}; db.media = db.media || {};
@@ -103,6 +104,7 @@ function pgStore() {
 
   return {
     name: 'PostgreSQL',
+    persistent: true,
     async init() {
       for (const s of SCHEMA) await pool.query(s);
       const u = await pool.query('SELECT key, name, salt, hash, color, created, last_seen, settings, profile FROM users');
@@ -233,7 +235,7 @@ function publicUser(key) {
   const p = u.profile || {};
   return {
     username: key, name: u.name, color: u.color, online: conns.has(key), lastSeen: u.lastSeen || null,
-    bio: p.bio || '', avatar: p.avatar || '', music: p.music || null
+    bio: p.bio || '', avatar: p.avatar || '', music: p.music || null, joined: u.created
   };
 }
 function allUsers() { return Object.keys(db.users).map(publicUser); }
@@ -471,6 +473,10 @@ async function api(req, res, url) {
     return;
   }
 
+  if (route === '/api/info' && req.method === 'GET') {
+    return json(res, 200, { persistent: !!store.persistent, storage: store.name });
+  }
+
   if (route === '/api/register' || route === '/api/login') {
     if (req.method !== 'POST') return json(res, 405, { error: 'Метод не підтримується' });
     if (limited('auth:' + clientIp(req), 30, 10 * 60 * 1000)) return json(res, 429, { error: 'Забагато спроб, зачекайте кілька хвилин' });
@@ -491,7 +497,12 @@ async function api(req, res, url) {
       return json(res, 200, { token: makeSession(key), me: publicUser(key) });
     }
     const user = db.users[key];
-    if (!user || !checkPassword(user, password)) return json(res, 401, { error: 'Невірне імʼя або пароль' });
+    if (!user) {
+      return json(res, 401, { code: 'no_user', error: store.persistent
+        ? 'Акаунт з таким імʼям не знайдено. Перевірте імʼя або зареєструйтесь'
+        : 'Акаунт не знайдено. Сервер працює без бази даних, тому після «сну» Render усі акаунти стираються. Підключіть DATABASE_URL (див. README)' });
+    }
+    if (!checkPassword(user, password)) return json(res, 401, { code: 'bad_pass', error: 'Невірний пароль' });
     return json(res, 200, { token: makeSession(key), me: publicUser(key) });
   }
 
@@ -794,6 +805,9 @@ const server = http.createServer(async (req, res) => {
 store.init().then(() => {
   ensureGeneral();
   gcMedia();
+  if (!store.persistent && (process.env.RENDER || process.env.NODE_ENV === 'production')) {
+    console.warn('УВАГА: DATABASE_URL не задано. Акаунти й повідомлення зникнуть після перезапуску або «сну» сервера!');
+  }
   server.listen(PORT, () => console.log('Vibe працює на порту ' + PORT + '. Сховище: ' + store.name +
     '. Користувачів: ' + Object.keys(db.users).length + ', повідомлень: ' + db.messages.length));
 }).catch((e) => {
