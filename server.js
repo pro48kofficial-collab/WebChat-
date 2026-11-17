@@ -72,6 +72,8 @@ const blobs = {
 };
 // аватарки, шпалери, музика й стікери не витісняються (вони малі й обмежені квотами), лише файли з чатів
 const SMALL_CTX = /^(profile|avatar|ravatar|sticker|wall):/;
+// аватарки (≈20 КБ) додатково лежать у базі: диск Render тимчасовий, а аватарка не повинна зникати
+const DURABLE = /^(avatar|ravatar):/;
 const evictable = (meta) => !SMALL_CTX.test(meta.chatId);
 let evictTimer = null;
 function scheduleEvict() {
@@ -117,6 +119,8 @@ function fileStore() {
       for (const k of ['rooms', 'media', 'pins', 'votes', 'packs']) db[k] = db[k] || {};
     },
     async migrateBlobs() { /* файли вже на диску */ },
+    async mediaLoad() { return null; },
+    async durableMissing() { return []; },
     userSave: save, sessionPut: save, sessionDel: save, msgAdd: save, msgDel: save, msgReact: save, msgPoll: save,
     readSet: save, roomSave: save, roomDel: save, mediaPut: save, mediaAttach: save, mediaDel: save,
     pinSet: save, voteSet: save, voteDel: save, packSave: save, packDel: save, chatDel: save,
@@ -155,6 +159,7 @@ const SCHEMA = [
     id TEXT PRIMARY KEY, chat_id TEXT NOT NULL, owner TEXT NOT NULL, mime TEXT NOT NULL,
     size INT NOT NULL, t BIGINT NOT NULL, attached BOOLEAN NOT NULL DEFAULT false)`,
   `ALTER TABLE media ADD COLUMN IF NOT EXISTS hash TEXT`,
+  `ALTER TABLE media ADD COLUMN IF NOT EXISTS data BYTEA`,
   `DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'media' AND column_name = 'data')
      THEN ALTER TABLE media ALTER COLUMN data DROP NOT NULL; END IF; END $$`,
   `CREATE TABLE IF NOT EXISTS pins (chat_id TEXT NOT NULL, msg_id TEXT NOT NULL, t BIGINT NOT NULL, PRIMARY KEY (chat_id, msg_id))`,
@@ -233,7 +238,8 @@ function pgStore() {
           if (!blobs.has(id) && db.media[id]) await blobs.put(id, buf);
           const h = sha(buf);
           if (db.media[id]) db.media[id].hash = h;
-          await pool.query('UPDATE media SET data = NULL, hash = $2 WHERE id = $1', [id, h]);
+          if (DURABLE.test(db.media[id] ? db.media[id].chatId : '')) await pool.query('UPDATE media SET hash = $2 WHERE id = $1', [id, h]);
+          else await pool.query('UPDATE media SET data = NULL, hash = $2 WHERE id = $1', [id, h]);
         } catch (e) { console.error('Не вдалося перенести файл', id, e.message); }
       }
       if (legacyIds.length) console.log('Файлів перенесено з бази на диск: ' + legacyIds.length);
@@ -272,10 +278,18 @@ function pgStore() {
           [r.id, r.type, r.title, r.description, !!r.isPublic, r.handle || null, r.invite || null, r.owner || null, r.color, r.created, J(r.members), r.avatar || null, r.comments !== false]);
     },
     roomDel(id) { run('DELETE FROM rooms WHERE id = $1', [id]); },
-    mediaPut(id, meta) {
-      run('INSERT INTO media (id, chat_id, owner, mime, size, t, attached, hash) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ' +
-          'ON CONFLICT (id) DO UPDATE SET attached = EXCLUDED.attached, hash = EXCLUDED.hash',
-          [id, meta.chatId, meta.owner, meta.mime, meta.size, meta.t, !!meta.attached, meta.hash || null]);
+    mediaPut(id, meta, buf) {
+      run('INSERT INTO media (id, chat_id, owner, mime, size, t, attached, hash, data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ' +
+          'ON CONFLICT (id) DO UPDATE SET attached = EXCLUDED.attached, hash = EXCLUDED.hash, data = COALESCE(EXCLUDED.data, media.data)',
+          [id, meta.chatId, meta.owner, meta.mime, meta.size, meta.t, !!meta.attached, meta.hash || null, buf || null]);
+    },
+    async mediaLoad(id) {
+      try { const r = await pool.query('SELECT data FROM media WHERE id = $1', [id]); return (r.rows[0] && r.rows[0].data) || null; }
+      catch (e) { return null; }
+    },
+    async durableMissing() {
+      try { return (await pool.query("SELECT id FROM media WHERE data IS NULL AND (chat_id LIKE 'avatar:%' OR chat_id LIKE 'ravatar:%')")).rows.map((r) => r.id); }
+      catch (e) { return []; }
     },
     mediaAttach(id) { run('UPDATE media SET attached = true WHERE id = $1', [id]); },
     mediaDel(id) { run('DELETE FROM media WHERE id = $1', [id]); },
@@ -628,7 +642,7 @@ async function uploadMedia(req, res, url, me) {
   const meta = { chatId: ctx, owner: me, mime, size: buf.length, t: Date.now(), attached: false, hash: sha(buf) };
   await blobs.put(id, buf);
   db.media[id] = meta;
-  store.mediaPut(id, meta);
+  store.mediaPut(id, meta, DURABLE.test(ctx) ? buf : null);
   return json(res, 200, { id, size: buf.length });
 }
 
@@ -637,7 +651,11 @@ async function sendMedia(req, res, url, me) {
   const meta = ID_RE.test(id) ? db.media[id] : null;
   if (!meta) return json(res, 404, { error: 'Файл не знайдено' });
   if (!mediaAccess(meta, me)) return json(res, 403, { error: 'Немає доступу' });
-  const buf = await blobs.get(id);
+  let buf = await blobs.get(id);
+  if (!buf && DURABLE.test(meta.chatId)) {
+    const d = await store.mediaLoad(id);
+    if (d) { await blobs.put(id, d); buf = d; }
+  }
   if (!buf) return json(res, 404, { code: 'evicted', error: 'Файл більше не зберігається на сервері' });
   res.writeHead(200, {
     'Content-Type': meta.mime,
@@ -662,6 +680,14 @@ async function restoreMedia(req, res, url, me) {
   return json(res, 200, { ok: true });
 }
 
+async function backfillDurable() {
+  for (const id of await store.durableMissing()) {
+    const m = db.media[id];
+    if (!m) continue;
+    const b = await blobs.get(id);
+    if (b) store.mediaPut(id, m, b);
+  }
+}
 async function backfillHashes() {
   for (const id of Object.keys(db.media)) {
     const m = db.media[id];
@@ -680,7 +706,7 @@ async function storeDataUrl(url, ctx, owner) {
   const meta = { chatId: ctx, owner, mime: m[1], size: buf.length, t: Date.now(), attached: true, hash: sha(buf) };
   await blobs.put(id, buf);
   db.media[id] = meta;
-  store.mediaPut(id, meta);
+  store.mediaPut(id, meta, DURABLE.test(ctx) ? buf : null);
   return id;
 }
 async function migrateLegacy() {
@@ -889,7 +915,7 @@ async function api(req, res, url) {
 
   if (route === '/api/media/missing') {
     const ids = (Array.isArray(body.ids) ? body.ids : []).slice(0, 50).map(String).filter((i) => ID_RE.test(i));
-    return json(res, 200, { missing: ids.filter((id) => db.media[id] && !blobs.has(id) && mediaAccess(db.media[id], me)) });
+    return json(res, 200, { missing: ids.filter((id) => db.media[id] && !blobs.has(id) && !DURABLE.test(db.media[id].chatId) && mediaAccess(db.media[id], me)) });
   }
 
   /* ---- кімнати ---- */
@@ -1300,6 +1326,7 @@ const server = http.createServer(async (req, res) => {
   await store.migrateBlobs();
   await backfillHashes();
   await migrateLegacy();
+  await backfillDurable();
   rebuildCC();
   ensureGeneral();
   gcMedia();
