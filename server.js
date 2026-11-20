@@ -74,6 +74,11 @@ const blobs = {
 const SMALL_CTX = /^(profile|avatar|ravatar|sticker|wall):/;
 // аватарки (≈20 КБ) додатково лежать у базі: диск Render тимчасовий, а аватарка не повинна зникати
 const DURABLE = /^(avatar|ravatar):/;
+// Малі файли (фото після стиснення ≈100 КБ, голосові, стікери) мають страховку в базі: диск Render тимчасовий.
+// Великі (відео, музика) живуть лише в кеші. DB_BACKUP_KB=0 вимикає страховку, MAX_DB_MEDIA_MB обмежує її обсяг.
+const BACKUP_MAX = (process.env.DB_BACKUP_KB === undefined ? 400 : Number(process.env.DB_BACKUP_KB) || 0) * 1024;
+const DB_MEDIA_CAP = (Number(process.env.MAX_DB_MEDIA_MB) || 300) * MB;
+const keepInDb = (ctx, size) => !!store.persistent && (DURABLE.test(ctx) || (BACKUP_MAX > 0 && size <= BACKUP_MAX));
 const evictable = (meta) => !SMALL_CTX.test(meta.chatId);
 let evictTimer = null;
 function scheduleEvict() {
@@ -119,8 +124,8 @@ function fileStore() {
       for (const k of ['rooms', 'media', 'pins', 'votes', 'packs']) db[k] = db[k] || {};
     },
     async migrateBlobs() { /* файли вже на диску */ },
+    inDb: new Set(),
     async mediaLoad() { return null; },
-    async durableMissing() { return []; },
     userSave: save, sessionPut: save, sessionDel: save, msgAdd: save, msgDel: save, msgReact: save, msgPoll: save,
     readSet: save, roomSave: save, roomDel: save, mediaPut: save, mediaAttach: save, mediaDel: save,
     pinSet: save, voteSet: save, voteDel: save, packSave: save, packDel: save, chatDel: save,
@@ -187,10 +192,31 @@ function pgStore() {
   const run = (sql, params) => { runP(sql, params).catch((e) => console.error('Помилка запису в БД:', e.message)); };
   const J = (v) => (v == null ? null : JSON.stringify(v));
   let legacyIds = [];
+  const inDb = new Set();
+  let dbBytes = 0, trimming = false;
+
+  // страховка в базі обмежена: найстаріші не-аватарки втрачають копію, коли обсяг перевищує ліміт
+  async function trimDb() {
+    if (trimming || dbBytes <= DB_MEDIA_CAP) return;
+    trimming = true;
+    try {
+      while (dbBytes > DB_MEDIA_CAP * 0.85) {
+        const r = await pool.query("SELECT id, size FROM media WHERE data IS NOT NULL AND chat_id NOT LIKE 'avatar:%' AND chat_id NOT LIKE 'ravatar:%' ORDER BY t LIMIT 100");
+        if (!r.rows.length) break;
+        for (const x of r.rows) {
+          await runP('UPDATE media SET data = NULL WHERE id = $1', [x.id]);
+          inDb.delete(x.id); dbBytes -= x.size;
+          if (dbBytes <= DB_MEDIA_CAP * 0.85) break;
+        }
+      }
+    } catch (e) { console.error('Не вдалося обрізати копії файлів у базі:', e.message); }
+    trimming = false;
+  }
 
   return {
-    name: 'PostgreSQL (лише метадані)',
+    name: 'PostgreSQL (метадані + копії малих файлів)',
     persistent: true,
+    inDb,
     async init() {
       for (const s of SCHEMA) await pool.query(s);
       const u = await pool.query('SELECT key, name, salt, hash, color, created, last_seen, settings, profile FROM users');
@@ -227,7 +253,11 @@ function pgStore() {
       const pk = await pool.query('SELECT id, title, owner, created, stickers FROM packs');
       for (const r of pk.rows) db.packs[r.id] = { id: r.id, title: r.title, owner: r.owner, created: Number(r.created), stickers: r.stickers || [] };
       // файли, які раніше лежали в базі (колонка data), треба перенести на диск
-      try { legacyIds = (await pool.query('SELECT id FROM media WHERE data IS NOT NULL')).rows.map((r) => r.id); } catch (e) { legacyIds = []; }
+      try {
+        const hd = await pool.query('SELECT id, size FROM media WHERE data IS NOT NULL');
+        for (const r of hd.rows) { inDb.add(r.id); dbBytes += r.size; }
+        legacyIds = hd.rows.map((r) => r.id);
+      } catch (e) { legacyIds = []; }
     },
     async migrateBlobs() {
       for (const id of legacyIds) {
@@ -238,8 +268,9 @@ function pgStore() {
           if (!blobs.has(id) && db.media[id]) await blobs.put(id, buf);
           const h = sha(buf);
           if (db.media[id]) db.media[id].hash = h;
-          if (DURABLE.test(db.media[id] ? db.media[id].chatId : '')) await pool.query('UPDATE media SET hash = $2 WHERE id = $1', [id, h]);
-          else await pool.query('UPDATE media SET data = NULL, hash = $2 WHERE id = $1', [id, h]);
+          const mm = db.media[id];
+          if (mm && keepInDb(mm.chatId, mm.size)) await pool.query('UPDATE media SET hash = $2 WHERE id = $1', [id, h]);
+          else { await pool.query('UPDATE media SET data = NULL, hash = $2 WHERE id = $1', [id, h]); inDb.delete(id); dbBytes -= (mm ? mm.size : 0); }
         } catch (e) { console.error('Не вдалося перенести файл', id, e.message); }
       }
       if (legacyIds.length) console.log('Файлів перенесено з бази на диск: ' + legacyIds.length);
@@ -282,17 +313,17 @@ function pgStore() {
       run('INSERT INTO media (id, chat_id, owner, mime, size, t, attached, hash, data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ' +
           'ON CONFLICT (id) DO UPDATE SET attached = EXCLUDED.attached, hash = EXCLUDED.hash, data = COALESCE(EXCLUDED.data, media.data)',
           [id, meta.chatId, meta.owner, meta.mime, meta.size, meta.t, !!meta.attached, meta.hash || null, buf || null]);
+      if (buf && !inDb.has(id)) { inDb.add(id); dbBytes += meta.size; trimDb(); }
     },
     async mediaLoad(id) {
       try { const r = await pool.query('SELECT data FROM media WHERE id = $1', [id]); return (r.rows[0] && r.rows[0].data) || null; }
       catch (e) { return null; }
     },
-    async durableMissing() {
-      try { return (await pool.query("SELECT id FROM media WHERE data IS NULL AND (chat_id LIKE 'avatar:%' OR chat_id LIKE 'ravatar:%')")).rows.map((r) => r.id); }
-      catch (e) { return []; }
-    },
     mediaAttach(id) { run('UPDATE media SET attached = true WHERE id = $1', [id]); },
-    mediaDel(id) { run('DELETE FROM media WHERE id = $1', [id]); },
+    mediaDel(id, size) {
+      if (inDb.delete(id)) dbBytes -= size || 0;
+      run('DELETE FROM media WHERE id = $1', [id]);
+    },
     pinSet(chatId, msgId, on) {
       if (on) run('INSERT INTO pins (chat_id, msg_id, t) VALUES ($1,$2,$3) ON CONFLICT (chat_id, msg_id) DO NOTHING', [chatId, msgId, Date.now()]);
       else run('DELETE FROM pins WHERE chat_id = $1 AND msg_id = $2', [chatId, msgId]);
@@ -579,10 +610,11 @@ const MIME = {
 MIME['audio/x-wav'] = MIME['audio/wav']; MIME['audio/wave'] = MIME['audio/wav'];
 
 function dropMedia(id) {
-  if (!db.media[id]) return;
+  const mm = db.media[id];
+  if (!mm) return;
   delete db.media[id];
   blobs.del(id);
-  store.mediaDel(id);
+  store.mediaDel(id, mm.size);
 }
 function attachMedia(id) {
   const m = db.media[id];
@@ -642,21 +674,31 @@ async function uploadMedia(req, res, url, me) {
   const meta = { chatId: ctx, owner: me, mime, size: buf.length, t: Date.now(), attached: false, hash: sha(buf) };
   await blobs.put(id, buf);
   db.media[id] = meta;
-  store.mediaPut(id, meta, DURABLE.test(ctx) ? buf : null);
+  store.mediaPut(id, meta, keepInDb(ctx, buf.length) ? buf : null);
   return json(res, 200, { id, size: buf.length });
 }
 
+// файл зник із диска сервера: просимо онлайн-пристрої, які мають його в кеші, повернути його (подія «want» у клієнті)
+const asked = new Map();
+function askForFile(id, meta) {
+  const now = Date.now();
+  if (asked.get(id) > now - 15000) return;
+  asked.set(id, now);
+  if (asked.size > 500) for (const [k, t] of asked) if (t < now - 60000) asked.delete(k);
+  const who = /^(profile|avatar|ravatar|sticker|wall):/.test(meta.chatId) ? [meta.owner] : (chatMembers(meta.chatId) || [meta.owner]);
+  broadcast(who, 'want', { id });
+}
 async function sendMedia(req, res, url, me) {
   const id = url.pathname.slice('/api/media/'.length);
   const meta = ID_RE.test(id) ? db.media[id] : null;
   if (!meta) return json(res, 404, { error: 'Файл не знайдено' });
   if (!mediaAccess(meta, me)) return json(res, 403, { error: 'Немає доступу' });
   let buf = await blobs.get(id);
-  if (!buf && DURABLE.test(meta.chatId)) {
+  if (!buf && store.inDb.has(id)) {
     const d = await store.mediaLoad(id);
     if (d) { await blobs.put(id, d); buf = d; }
   }
-  if (!buf) return json(res, 404, { code: 'evicted', error: 'Файл більше не зберігається на сервері' });
+  if (!buf) { askForFile(id, meta); return json(res, 404, { code: 'evicted', error: 'Файл тимчасово недоступний' }); }
   res.writeHead(200, {
     'Content-Type': meta.mime,
     'Content-Length': buf.length,
@@ -677,13 +719,16 @@ async function restoreMedia(req, res, url, me) {
   const buf = await readRaw(req, meta.size + 1024);
   if (!meta.hash || buf.length !== meta.size || sha(buf) !== meta.hash) return json(res, 400, { error: 'Файл не збігається з оригіналом' });
   await blobs.put(id, buf);
+  if (keepInDb(meta.chatId, meta.size) && !store.inDb.has(id)) store.mediaPut(id, meta, buf);
   return json(res, 200, { ok: true });
 }
 
+// файли, що вже лежать на диску, але ще не мають копії в базі (старі аватарки, фото), отримують її при старті
 async function backfillDurable() {
-  for (const id of await store.durableMissing()) {
+  if (!store.persistent) return;
+  for (const id of Object.keys(db.media)) {
     const m = db.media[id];
-    if (!m) continue;
+    if (!blobs.has(id) || store.inDb.has(id) || !keepInDb(m.chatId, m.size)) continue;
     const b = await blobs.get(id);
     if (b) store.mediaPut(id, m, b);
   }
@@ -706,7 +751,7 @@ async function storeDataUrl(url, ctx, owner) {
   const meta = { chatId: ctx, owner, mime: m[1], size: buf.length, t: Date.now(), attached: true, hash: sha(buf) };
   await blobs.put(id, buf);
   db.media[id] = meta;
-  store.mediaPut(id, meta, DURABLE.test(ctx) ? buf : null);
+  store.mediaPut(id, meta, keepInDb(ctx, buf.length) ? buf : null);
   return id;
 }
 async function migrateLegacy() {
@@ -915,7 +960,7 @@ async function api(req, res, url) {
 
   if (route === '/api/media/missing') {
     const ids = (Array.isArray(body.ids) ? body.ids : []).slice(0, 50).map(String).filter((i) => ID_RE.test(i));
-    return json(res, 200, { missing: ids.filter((id) => db.media[id] && !blobs.has(id) && !DURABLE.test(db.media[id].chatId) && mediaAccess(db.media[id], me)) });
+    return json(res, 200, { missing: ids.filter((id) => db.media[id] && !blobs.has(id) && !store.inDb.has(id) && mediaAccess(db.media[id], me)) });
   }
 
   /* ---- кімнати ---- */
@@ -998,6 +1043,7 @@ async function api(req, res, url) {
     if (!r || r.owner !== me) return json(res, 403, { error: 'Лише власник може видалити чат' });
     const members = r.members.slice();
     const mediaIds = Object.keys(db.media).filter((id) => db.media[id].chatId === r.id);
+    const avMeta = r.avatar ? db.media[r.avatar] : null;
     if (r.avatar) mediaIds.push(r.avatar);
     const gone = new Set(db.messages.filter((m) => m.chatId === r.id).map((m) => m.id));
     gone.forEach((id) => { delete db.votes[id]; });
@@ -1009,7 +1055,7 @@ async function api(req, res, url) {
     delete db.rooms[r.id];
     store.roomDel(r.id);
     store.chatDel(r.id);
-    if (r.avatar) store.mediaDel(r.avatar);
+    if (r.avatar && avMeta) store.mediaDel(r.avatar, avMeta.size);
     broadcast(members, 'roomdel', { id: r.id });
     return json(res, 200, { ok: true });
   }
